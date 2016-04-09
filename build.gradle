@@ -1,0 +1,82 @@
+group 'org.yetiz.utils'
+version '1.0'
+
+apply plugin: 'java'
+apply plugin: 'idea'
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+
+    maven {
+        url "https://repository.cloudera.com/artifactory/cloudera-repos/"
+    }
+
+    flatDir {
+        dirs 'libs'
+    }
+}
+
+dependencies {
+    compile fileTree(include: ['*.jar'], dir: 'libs')
+    compile project(':j-exception')
+
+    // CDH HBase
+    compile 'org.apache.hbase:hbase-client:1.0.0-cdh5.5.1'
+    // for Logging - start
+    compile 'org.slf4j:slf4j-api:1.7.12'
+    compile 'org.apache.logging.log4j:log4j-slf4j-impl:2.3'
+    compile 'org.apache.logging.log4j:log4j-api:2.3'
+    compile 'org.apache.logging.log4j:log4j-core:2.3'
+    compile 'com.fasterxml.jackson.core:jackson-core:2.6.1'
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.6.1'
+    compile 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.6.1'
+    // reflection
+    compile 'org.javassist:javassist:3.20.0-GA'
+    compile 'org.apache.servicemix.bundles:org.apache.servicemix.bundles.reflections:0.9.10_3'
+
+}
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+}
+
+def manifestMainClass = 'Launcher'
+def manifestImplementationVersion = "${version}"
+def manifestBuiltDate = System.currentTimeMillis()
+def manifestClassPath = configurations.compile.collect { "libs${File.separator}${it.getName()}" }.join(' ')
+
+task library(type: Copy) {
+    into "$buildDir${File.separator}output${File.separator}libs"
+    from configurations.runtime
+}
+
+jar {
+    dependsOn library
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    destinationDir file("$buildDir${File.separator}output/")
+    from sourceSets.main.allSource
+}
+
+task manifastJar(type: Jar, dependsOn: sourcesJar) {
+    archiveName = "$baseName-$version.$extension"
+    destinationDir file("$buildDir${File.separator}output/")
+    from files(sourceSets.main.output.classesDir)
+    from files(sourceSets.main.output.resourcesDir)
+    manifest {
+        attributes 'Implementation-Version': manifestImplementationVersion,
+                'Built-Date': manifestBuiltDate,
+                "Class-Path": manifestClassPath
+    }
+}
+
+artifacts {
+    archives manifastJar
+}

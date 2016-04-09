@@ -1,0 +1,3 @@
+[submodule "j-exception"]
+	path = j-exception
+	url = git@github.com:yetiz-org/j-exception.git

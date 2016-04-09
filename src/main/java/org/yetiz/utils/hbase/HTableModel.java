@@ -1,0 +1,365 @@
+package org.yetiz.utils.hbase;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.reflections.Reflections;
+import org.yetiz.utils.exception.InvalidOperationException;
+import org.yetiz.utils.exception.TypeNotFoundException;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.stream.Stream;
+
+/**
+ * Created by yeti on 16/4/1.
+ */
+public abstract class HTableModel<T extends HTableModel> {
+	protected static final ObjectMapper JSON_MAPPER = new ObjectMapper(new JsonFactory());
+	private static final HashMap<TableName, HashMap<String, Qualifier>>
+		ModelQualifiers = new HashMap<>();
+	private static final HashMap<TableName, HashMap<String, Family>>
+		ModelFamilies = new HashMap<>();
+	private static final HashMap<Class<? extends HTableModel>, TableName>
+		ModelTableNameMaps = new HashMap<>();
+	private static final HashMap<TableName, Class<? extends HTableModel>>
+		TableNameModelMaps = new HashMap<>();
+	private static final HashMap<TableName, HashMap<String, String>>
+		ModelFQFields = new HashMap<>();
+	private static final Reflections REFLECTION = new Reflections("");
+	private static Field resultField;
+	private static Field isResultField;
+
+	static {
+		initModelQualifier();
+		try {
+			resultField = HTableModel.class.getDeclaredField("result");
+			isResultField = HTableModel.class.getDeclaredField("isResult");
+		} catch (Throwable throwable) {
+		}
+	}
+
+	private final HashMap<String, ValueSetterPackage> setValues;
+	private boolean isResult;
+	private Result result = null;
+	private boolean copy = false;
+
+	public HTableModel() {
+		isResult = false;
+		setValues = new HashMap<>();
+	}
+
+	public static final Class<? extends HTableModel> modelType(TableName tableName) {
+		return TableNameModelMaps.get(tableName);
+	}
+
+	public static final <R extends HTableModel> R newWrappedModel(TableName tableName, Result result) {
+		try {
+			R r = (R) TableNameModelMaps.get(tableName).newInstance();
+			resultField.set(r, result);
+			isResultField.set(r, true);
+			return r;
+		} catch (Throwable throwable) {
+			throw new TypeNotFoundException(throwable);
+		}
+	}
+
+	public static final void DBDrop(HBaseClient client) {
+		implementedModels()
+			.parallel()
+			.forEach(type -> {
+				try {
+					type.newInstance().drop(client);
+				} catch (Throwable throwable) {
+				}
+			});
+	}
+
+	private static final Stream<Class<? extends HTableModel>> implementedModels() {
+		return REFLECTION
+			.getSubTypesOf(HTableModel.class)
+			.stream()
+			.filter(type -> !Modifier.isAbstract(type.getModifiers()));
+	}
+
+	public void drop(HBaseClient client) {
+		client.admin().deleteTable(tableName());
+	}
+
+	public TableName tableName() {
+		return ModelTableNameMaps.get(this.getClass());
+	}
+
+	public static final void DBMigration(HBaseClient client) {
+		implementedModels()
+			.parallel()
+			.forEach(type -> {
+				try {
+					type.newInstance().migrate(client);
+				} catch (Throwable throwable) {
+				}
+			});
+	}
+
+	public void migrate(HBaseClient client) {
+		if (!client.admin().tableExists(tableName())) {
+			client.admin().createTable(tableName());
+		}
+
+		ObjectNode root = JSON_MAPPER.createObjectNode();
+		root.put("object_name", this.getClass().getName());
+		HTableDescriptor descriptor = client.admin().tableDescriptor(tableName());
+
+		ArrayNode fields = JSON_MAPPER.createArrayNode();
+		HTableDescriptor finalDescriptor = descriptor;
+		ModelFamilies.get(tableName()).entrySet()
+			.stream()
+			.map(entry -> {
+				fields.add(JSON_MAPPER.createObjectNode()
+					.put("field_name", entry.getKey())
+					.put("family", entry.getValue().family())
+					.put("qualifier", ModelQualifiers.get(tableName()).get(entry.getKey()).qualifier())
+					.put("description", ModelQualifiers.get(tableName()).get(entry.getKey()).description())
+					.put("compression", entry.getValue().compression().getName()));
+				return entry;
+			})
+			.collect(HashMap::new,
+				(map, entry) -> {
+					if (!map.containsKey(entry.getValue().family())) {
+						map.put(entry.getValue().family(), entry.getValue());
+					}
+				},
+				(map1, map2) -> map1.putAll(map2))
+			.entrySet()
+			.stream()
+			.forEach(entry -> {
+				if (!finalDescriptor.hasFamily(HBaseClient.bytes((String) entry.getKey()))) {
+					client
+						.admin()
+						.addColumnFamily(tableName(),
+							((Family) entry.getValue()).family(),
+							((Family) entry.getValue()).compression());
+				}
+			});
+
+		root.set("fields", fields);
+		descriptor = client.admin().tableDescriptor(tableName());
+		descriptor.setValue("description", root.toString());
+		client.admin().updateTable(tableName(), descriptor);
+	}
+
+	private static void initModelQualifier() {
+		implementedModels()
+			.map(type -> {
+				TableName tableName = TableName.valueOf(type.getSimpleName());
+				ModelTableNameMaps.put(type, tableName);
+				TableNameModelMaps.put(tableName, type);
+				return type;
+			})
+			.forEach(type -> {
+				try {
+					TableName tableName = type.newInstance().tableName();
+					ModelFQFields.put(tableName,
+						methods(type, null)
+							.stream()
+							.collect(HashMap<String, String>::new,
+								(map, method) -> {
+									if (method.getAnnotation(Family.class) != null &&
+										method.getAnnotation(Qualifier.class) != null) {
+										map.put(method.getAnnotation(Family.class).family() +
+												"+-" +
+												method.getAnnotation(Qualifier.class).qualifier(),
+											method.getName());
+									}
+								},
+								(map1, map2) -> map1.putAll(map2)));
+
+					ModelQualifiers.put(tableName,
+						methods(type, null)
+							.stream()
+							.collect(HashMap<String, Qualifier>::new,
+								(map, method) -> {
+									if (method.getAnnotation(Qualifier.class) != null) {
+										map.put(method.getName(), method.getAnnotation(Qualifier.class));
+									}
+								},
+								(map1, map2) -> map1.putAll(map2)));
+
+					ModelFamilies.put(tableName,
+						methods(type, null)
+							.stream()
+							.collect(HashMap<String, Family>::new,
+								(map, method) -> {
+									if (method.getAnnotation(Family.class) != null) {
+										map.put(method.getName(), method.getAnnotation(Family.class));
+									}
+								},
+								(map1, map2) -> map1.putAll(map2)));
+				} catch (Throwable throwable) {
+				}
+			});
+	}
+
+	private static final List<Field> fields(Class type, List<Field> fields) {
+		if (Modifier.isAbstract(type.getModifiers())) {
+			return fields;
+		}
+
+		if (fields == null) {
+			fields = new ArrayList<>();
+		}
+
+		fields.addAll(Arrays.asList(type.getDeclaredFields()));
+
+		if (type.getSuperclass() != null) {
+			fields = fields(type.getSuperclass(), fields);
+		}
+
+		return fields;
+	}
+
+	private static final List<Method> methods(Class type, List<Method> methods) {
+		if (Modifier.isAbstract(type.getModifiers())) {
+			return methods;
+		}
+
+		if (methods == null) {
+			methods = new ArrayList<>();
+		}
+
+		methods.addAll(Arrays.asList(type.getDeclaredMethods()));
+
+		if (type.getSuperclass() != null) {
+			methods = methods(type.getSuperclass(), methods);
+		}
+
+		return methods;
+	}
+
+	public static final Long longValue(byte[] bytes) {
+		return ByteBuffer.wrap(bytes).getLong();
+	}
+
+	public static Get get(byte[] row) {
+		Get get = new Get(row);
+		return get;
+	}
+
+	public static Delete delete(byte[] row) {
+		Delete delete = new Delete(row);
+		return delete;
+	}
+
+	public Put put(byte[] row) {
+		Put put = new Put(row);
+		setValues.values()
+			.stream()
+			.forEach(pack -> put.addColumn(byteValue(pack.family), byteValue(pack.qualifier), pack.value));
+
+		return put;
+	}
+
+	public static final byte[] byteValue(String string) {
+		return string.getBytes(HBaseClient.DEFAULT_CHARSET);
+	}
+
+	public Delete delete() {
+		if (!isResult) {
+			throw new InvalidOperationException("this is not result instance.");
+		}
+
+		Delete delete = new Delete(result.getRow());
+		return delete;
+	}
+
+	public final byte[] row() {
+		return result.getRow();
+	}
+
+	protected final T setValue(String string) {
+		copyResultToSetter();
+
+		String methodName = Thread.currentThread().getStackTrace()[2].getMethodName();
+		this.setValues.put(methodName,
+			new ValueSetterPackage(family(methodName), qualifier(methodName), byteValue(string)));
+		return (T) this;
+	}
+
+	private void copyResultToSetter() {
+		if (isResult && !copy) {
+			copy = true;
+		} else {
+			return;
+		}
+
+		if (isResult) {
+			result.listCells()
+				.stream()
+				.forEach(cell -> {
+					String family = stringValue(cell.getFamilyArray());
+					String qualifier = stringValue(cell.getQualifierArray());
+					String methodName = ModelFQFields.get(tableName())
+						.get(family + "+-" + qualifier);
+					setValues.put(methodName, new ValueSetterPackage(family, qualifier, cell.getValueArray()));
+				});
+		}
+	}
+
+	public static final String stringValue(byte[] bytes) {
+		return new String(bytes, HBaseClient.DEFAULT_CHARSET);
+	}
+
+	private final String family(String methodName) {
+		return ModelFamilies.get(tableName()).get(methodName).family();
+	}
+
+	private final String qualifier(String methodName) {
+		return ModelQualifiers.get(tableName()).get(methodName).qualifier();
+	}
+
+	protected final T setValue(long longValue) {
+		copyResultToSetter();
+
+		String methodName = Thread.currentThread().getStackTrace()[2].getMethodName();
+		this.setValues.put(methodName,
+			new ValueSetterPackage(family(methodName), qualifier(methodName), byteValue(longValue)));
+		return (T) this;
+	}
+
+	public static final byte[] byteValue(long longValue) {
+		return ByteBuffer.allocate(8).putLong(longValue).array();
+	}
+
+	protected final byte[] retrieveValue() {
+		String methodName = Thread.currentThread().getStackTrace()[2].getMethodName();
+		if (isResult && !copy) {
+			return result.getValue(HBaseClient.bytes(family(methodName)), HBaseClient.bytes(qualifier(methodName)));
+		}
+
+		return setValues.get(methodName).value;
+	}
+
+	private class ValueSetterPackage {
+		public String family;
+		public String qualifier;
+		public byte[] value;
+
+		public ValueSetterPackage(String family, String qualifier, byte[] value) {
+			this.family = family;
+			this.qualifier = qualifier;
+			this.value = value;
+		}
+	}
+}
