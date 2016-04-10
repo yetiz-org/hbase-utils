@@ -1,5 +1,6 @@
 group 'org.yetiz.utils'
-version '1.5.5.1'
+version '1.5.5.1-SNAPSHOT'
+ext.isReleaseVersion = !version.endsWith("SNAPSHOT")
 
 apply plugin: 'java'
 apply plugin: 'idea'
@@ -58,12 +59,12 @@ task library(type: Copy) {
     from configurations.runtime
 }
 
-task copyLicense(type: Copy){
+task copyLicense(type: Copy) {
     into sourceSets.main.output.resourcesDir
     from "$projectDir${File.separator}LICENSE"
 }
 
-task copyNotice(type: Copy){
+task copyNotice(type: Copy) {
     into sourceSets.main.output.resourcesDir
     from "$projectDir${File.separator}NOTICE"
 }
@@ -103,6 +104,7 @@ artifacts {
 
 
 signing {
+    required { isReleaseVersion && gradle.taskGraph.hasTask("uploadArchives") }
     sign configurations.archives
 }
 
