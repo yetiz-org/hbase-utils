@@ -343,6 +343,10 @@ public class HBaseTable {
 				return convert(scanner.next());
 			}
 
+			private <R extends HTableModel> R convert(Result result) {
+				return HTableModel.newWrappedModel(tableName, result);
+			}
+
 			public <R extends HTableModel> List<R> next(int nbRows) throws IOException {
 				return Arrays.asList(scanner.next(nbRows))
 					.stream()
@@ -355,8 +359,8 @@ public class HBaseTable {
 				scanner.close();
 			}
 
-			public void forEach(Consumer<? super HTableModel> action) {
-				scanner.forEach(result -> action.accept(convert(result)));
+			public <R extends HTableModel> void forEach(Consumer<? super R> action) {
+				scanner.forEach(result -> action.accept(this.<R>convert(result)));
 			}
 		}
 	}

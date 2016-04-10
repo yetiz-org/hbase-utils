@@ -65,6 +65,10 @@ public abstract class HTableModel<T extends HTableModel> {
 		setValues = new HashMap<>();
 	}
 
+	public static final TableName tableName(Class<? extends HTableModel> type) {
+		return ModelTableNameMaps.get(type);
+	}
+
 	public static final Class<? extends HTableModel> modelType(TableName tableName) {
 		return TableNameModelMaps.get(tableName);
 	}
