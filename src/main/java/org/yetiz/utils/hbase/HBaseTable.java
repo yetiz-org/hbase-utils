@@ -168,7 +168,7 @@ public class HBaseTable {
 	}
 
 	/**
-	 * Only for Get, Put, Delete, Append, Increment.<br />
+	 * Only for Get, Put, Delete, Append, Increment.<br>
 	 * With callback
 	 *
 	 * @return <code>Async</code>
@@ -178,7 +178,7 @@ public class HBaseTable {
 	}
 
 	/**
-	 * Only for Get, Put, Delete, Append, Increment.<br />
+	 * Only for Get, Put, Delete, Append, Increment.<br>
 	 * No callback, this is faster then <code>async()</code>
 	 *
 	 * @return <code>Fast</code>
