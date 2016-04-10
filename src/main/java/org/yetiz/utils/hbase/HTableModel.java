@@ -276,6 +276,10 @@ public abstract class HTableModel<T extends HTableModel> {
 		return delete;
 	}
 
+	public boolean isEmpty() {
+		return result == null || result.isEmpty();
+	}
+
 	public Put put(byte[] row) {
 		Put put = new Put(row);
 		if (!setValues.containsKey("row_updated_time")) {
