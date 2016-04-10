@@ -10,6 +10,8 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.reflections.Reflections;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.yetiz.utils.hbase.exception.InvalidOperationException;
 import org.yetiz.utils.hbase.exception.TypeNotFoundException;
 
@@ -41,6 +43,7 @@ public abstract class HTableModel<T extends HTableModel> {
 	private static final Reflections REFLECTION = new Reflections("");
 	private static Field resultField;
 	private static Field isResultField;
+	private static Logger LOGGER = LoggerFactory.getLogger(HTableModel.class);
 
 	static {
 		initModelQualifier();
@@ -103,6 +106,7 @@ public abstract class HTableModel<T extends HTableModel> {
 	}
 
 	public static final void DBMigration(HBaseClient client) {
+		LOGGER.info("Start migration.");
 		implementedModels()
 			.parallel()
 			.forEach(type -> {
@@ -111,12 +115,15 @@ public abstract class HTableModel<T extends HTableModel> {
 				} catch (Throwable throwable) {
 				}
 			});
+		LOGGER.info("Migration done.");
 	}
 
 	public void migrate(HBaseClient client) {
 		if (!client.admin().tableExists(tableName())) {
 			client.admin().createTable(tableName());
 		}
+
+		LOGGER.info(String.format("%s migrating...", tableName().get().getNameAsString()));
 
 		ObjectNode root = JSON_MAPPER.createObjectNode();
 		root.put("object_name", this.getClass().getName());
