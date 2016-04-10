@@ -130,17 +130,21 @@ public abstract class HTableModel<T extends HTableModel> {
 		root.put("object_name", this.getClass().getName());
 		HTableDescriptor descriptor = client.admin().tableDescriptor(tableName());
 
-		ArrayNode fields = JSON_MAPPER.createArrayNode();
+		ArrayNode families = JSON_MAPPER.createArrayNode();
 		HTableDescriptor finalDescriptor = descriptor;
+		HashMap<String, ArrayNode> familyMaps = new HashMap<>();
+		HashMap<String, String> familyComp = new HashMap<>();
 		ModelFamilies.get(tableName()).entrySet()
 			.stream()
 			.map(entry -> {
-				fields.add(JSON_MAPPER.createObjectNode()
-					.put("field_name", entry.getKey())
-					.put("family", entry.getValue().family())
-					.put("qualifier", ModelQualifiers.get(tableName()).get(entry.getKey()).qualifier())
-					.put("description", ModelQualifiers.get(tableName()).get(entry.getKey()).description())
-					.put("compression", entry.getValue().compression().getName()));
+				familyMaps.put(entry.getValue().family(),
+					familyMaps.getOrDefault(entry.getValue().family(), JSON_MAPPER.createArrayNode())
+						.add(JSON_MAPPER.createObjectNode()
+							.put("field_name", entry.getKey())
+							.put("qualifier", ModelQualifiers.get(tableName()).get(entry.getKey()).qualifier())
+							.put("description", ModelQualifiers.get(tableName()).get(entry.getKey()).description()))
+				);
+				familyComp.put(entry.getValue().family(), entry.getValue().compression().getName());
 				return entry;
 			})
 			.collect(HashMap::new,
@@ -162,7 +166,16 @@ public abstract class HTableModel<T extends HTableModel> {
 				}
 			});
 
-		root.set("fields", fields);
+		familyMaps.entrySet()
+			.stream()
+			.forEach(entry -> families
+					.add(JSON_MAPPER.createObjectNode()
+						.put("family", entry.getKey())
+						.put("compression", familyComp.get(entry.getKey()))
+						.set("qualifiers", entry.getValue()))
+			);
+
+		root.set("families", families);
 		descriptor = client.admin().tableDescriptor(tableName());
 		descriptor.setValue("description", root.toString());
 		client.admin().updateTable(tableName(), descriptor);
