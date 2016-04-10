@@ -41,6 +41,7 @@ public abstract class HTableModel<T extends HTableModel> {
 	private static final HashMap<TableName, HashMap<String, String>>
 		ModelFQFields = new HashMap<>();
 	private static final Reflections REFLECTION = new Reflections("");
+	private static final ValueSetterPackage DEFAULT_VALUE_SETTER_PACKAGE = new ValueSetterPackage("", "", null);
 	private static Field resultField;
 	private static Field isResultField;
 	private static Logger LOGGER = LoggerFactory.getLogger(HTableModel.class);
@@ -178,8 +179,9 @@ public abstract class HTableModel<T extends HTableModel> {
 			.forEach(type -> {
 				try {
 					TableName tableName = type.newInstance().tableName();
+					List<Method> methods = methods(type, null);
 					ModelFQFields.put(tableName,
-						methods(type, null)
+						methods
 							.stream()
 							.collect(HashMap<String, String>::new,
 								(map, method) -> {
@@ -194,7 +196,7 @@ public abstract class HTableModel<T extends HTableModel> {
 								(map1, map2) -> map1.putAll(map2)));
 
 					ModelQualifiers.put(tableName,
-						methods(type, null)
+						methods
 							.stream()
 							.collect(HashMap<String, Qualifier>::new,
 								(map, method) -> {
@@ -205,7 +207,7 @@ public abstract class HTableModel<T extends HTableModel> {
 								(map1, map2) -> map1.putAll(map2)));
 
 					ModelFamilies.put(tableName,
-						methods(type, null)
+						methods
 							.stream()
 							.collect(HashMap<String, Family>::new,
 								(map, method) -> {
@@ -220,10 +222,6 @@ public abstract class HTableModel<T extends HTableModel> {
 	}
 
 	private static final List<Field> fields(Class type, List<Field> fields) {
-		if (Modifier.isAbstract(type.getModifiers())) {
-			return fields;
-		}
-
 		if (fields == null) {
 			fields = new ArrayList<>();
 		}
@@ -238,10 +236,6 @@ public abstract class HTableModel<T extends HTableModel> {
 	}
 
 	private static final List<Method> methods(Class type, List<Method> methods) {
-		if (Modifier.isAbstract(type.getModifiers())) {
-			return methods;
-		}
-
 		if (methods == null) {
 			methods = new ArrayList<>();
 		}
@@ -253,10 +247,6 @@ public abstract class HTableModel<T extends HTableModel> {
 		}
 
 		return methods;
-	}
-
-	public static final Long longValue(byte[] bytes) {
-		return ByteBuffer.wrap(bytes).getLong();
 	}
 
 	public static Get get(byte[] row) {
@@ -271,15 +261,71 @@ public abstract class HTableModel<T extends HTableModel> {
 
 	public Put put(byte[] row) {
 		Put put = new Put(row);
+		if (!setValues.containsKey("row_updated_time")) {
+			row_updated_time(System.currentTimeMillis());
+		}
+
 		setValues.values()
 			.stream()
 			.forEach(pack -> put.addColumn(byteValue(pack.family), byteValue(pack.qualifier), pack.value));
-
 		return put;
 	}
 
 	public static final byte[] byteValue(String string) {
 		return string.getBytes(HBaseClient.DEFAULT_CHARSET);
+	}
+
+	@Family(family = "d")
+	@Qualifier(qualifier = "rowudt", description = "row-updated-time")
+	public T row_updated_time(long updated_time) {
+		return setValue(updated_time);
+	}
+
+	protected final T setValue(long longValue) {
+		copyResultToSetter();
+
+		String methodName = Thread.currentThread().getStackTrace()[2].getMethodName();
+		this.setValues.put(methodName,
+			new ValueSetterPackage(family(methodName), qualifier(methodName), byteValue(longValue)));
+		return (T) this;
+	}
+
+	private void copyResultToSetter() {
+		if (!isResult) {
+			return;
+		}
+
+		if (!copy) {
+			copy = true;
+		} else {
+			return;
+		}
+
+		result.listCells()
+			.stream()
+			.forEach(cell -> {
+				String family = stringValue(cell.getFamilyArray());
+				String qualifier = stringValue(cell.getQualifierArray());
+				String methodName = ModelFQFields.get(tableName())
+					.get(family + "+-" + qualifier);
+				setValues.put(methodName, new ValueSetterPackage(family, qualifier, cell.getValueArray()));
+			});
+	}
+
+	public static final String stringValue(byte[] bytes) {
+		return new String(bytes, HBaseClient.DEFAULT_CHARSET);
+	}
+
+	private final String family(String methodName) {
+		return ModelFamilies.get(tableName()).get(methodName).family();
+	}
+
+	private final String qualifier(String methodName) {
+		return ModelQualifiers.get(tableName()).get(methodName).qualifier();
+	}
+
+	public static final byte[] byteValue(long longValue) {
+		return ByteBuffer.allocate(8).putLong(longValue).array();
 	}
 
 	public Delete delete() {
@@ -304,49 +350,12 @@ public abstract class HTableModel<T extends HTableModel> {
 		return (T) this;
 	}
 
-	private void copyResultToSetter() {
-		if (isResult && !copy) {
-			copy = true;
-		} else {
-			return;
-		}
-
-		if (isResult) {
-			result.listCells()
-				.stream()
-				.forEach(cell -> {
-					String family = stringValue(cell.getFamilyArray());
-					String qualifier = stringValue(cell.getQualifierArray());
-					String methodName = ModelFQFields.get(tableName())
-						.get(family + "+-" + qualifier);
-					setValues.put(methodName, new ValueSetterPackage(family, qualifier, cell.getValueArray()));
-				});
-		}
+	public Long row_updated_time() {
+		return longValue(retrieveValue());
 	}
 
-	public static final String stringValue(byte[] bytes) {
-		return new String(bytes, HBaseClient.DEFAULT_CHARSET);
-	}
-
-	private final String family(String methodName) {
-		return ModelFamilies.get(tableName()).get(methodName).family();
-	}
-
-	private final String qualifier(String methodName) {
-		return ModelQualifiers.get(tableName()).get(methodName).qualifier();
-	}
-
-	protected final T setValue(long longValue) {
-		copyResultToSetter();
-
-		String methodName = Thread.currentThread().getStackTrace()[2].getMethodName();
-		this.setValues.put(methodName,
-			new ValueSetterPackage(family(methodName), qualifier(methodName), byteValue(longValue)));
-		return (T) this;
-	}
-
-	public static final byte[] byteValue(long longValue) {
-		return ByteBuffer.allocate(8).putLong(longValue).array();
+	public static final Long longValue(byte[] bytes) {
+		return ByteBuffer.wrap(bytes).getLong();
 	}
 
 	protected final byte[] retrieveValue() {
@@ -355,10 +364,10 @@ public abstract class HTableModel<T extends HTableModel> {
 			return result.getValue(HBaseClient.bytes(family(methodName)), HBaseClient.bytes(qualifier(methodName)));
 		}
 
-		return setValues.get(methodName).value;
+		return setValues.getOrDefault(methodName, DEFAULT_VALUE_SETTER_PACKAGE).value;
 	}
 
-	private class ValueSetterPackage {
+	private static class ValueSetterPackage {
 		public String family;
 		public String qualifier;
 		public byte[] value;

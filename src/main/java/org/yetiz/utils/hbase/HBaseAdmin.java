@@ -4,10 +4,13 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
+import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
 import org.yetiz.utils.hbase.exception.CatcherRaiseException;
 import org.yetiz.utils.hbase.exception.DuplicateException;
 import org.yetiz.utils.hbase.exception.UnHandledException;
 import org.yetiz.utils.hbase.exception.YHBaseException;
+
+import java.util.List;
 
 /**
  * Created by yeti on 16/4/1.
@@ -51,6 +54,46 @@ public class HBaseAdmin {
 			throw d;
 		} catch (Throwable t) {
 			throw new CatcherRaiseException(t);
+		}
+	}
+
+	public void snapshot(String snapshotName, TableName tableName) {
+		try {
+			admin().snapshot(snapshotName, tableName.get());
+		} catch (Throwable throwable) {
+			throw new UnHandledException(throwable);
+		}
+	}
+
+	public void restoreSnapshot(String snapshotName) {
+		try {
+			admin().restoreSnapshot(snapshotName);
+		} catch (Throwable throwable) {
+			throw new UnHandledException(throwable);
+		}
+	}
+
+	public void cloneSnapshot(String snapshotName, TableName tableName) {
+		try {
+			admin().cloneSnapshot(snapshotName, tableName.get());
+		} catch (Throwable throwable) {
+			throw new UnHandledException(throwable);
+		}
+	}
+
+	public List<HBaseProtos.SnapshotDescription> listSnapshots() {
+		try {
+			return admin().listSnapshots();
+		} catch (Throwable throwable) {
+			throw new UnHandledException(throwable);
+		}
+	}
+
+	public void deleteSnapshot(String snapshotName) {
+		try {
+			admin().deleteSnapshot(snapshotName);
+		} catch (Throwable throwable) {
+			throw new UnHandledException(throwable);
 		}
 	}
 
