@@ -4,10 +4,10 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
-import org.yetiz.utils.exception.CatcherRaiseException;
-import org.yetiz.utils.exception.DuplicateException;
-import org.yetiz.utils.exception.UnHandledException;
-import org.yetiz.utils.exception.YException;
+import org.yetiz.utils.hbase.exception.CatcherRaiseException;
+import org.yetiz.utils.hbase.exception.DuplicateException;
+import org.yetiz.utils.hbase.exception.UnHandledException;
+import org.yetiz.utils.hbase.exception.YHBaseException;
 
 /**
  * Created by yeti on 16/4/1.
@@ -47,7 +47,7 @@ public class HBaseAdmin {
 	private final void CATCHER(Runnable task) {
 		try {
 			task.run();
-		} catch (YException d) {
+		} catch (YHBaseException d) {
 			throw d;
 		} catch (Throwable t) {
 			throw new CatcherRaiseException(t);

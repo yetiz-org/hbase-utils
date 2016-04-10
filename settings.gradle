@@ -1,3 +1,1 @@
 rootProject.name = 'hbase-utils'
-include 'j-exception'
-

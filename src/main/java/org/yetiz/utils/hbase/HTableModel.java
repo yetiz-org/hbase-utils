@@ -10,8 +10,8 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.reflections.Reflections;
-import org.yetiz.utils.exception.InvalidOperationException;
-import org.yetiz.utils.exception.TypeNotFoundException;
+import org.yetiz.utils.hbase.exception.InvalidOperationException;
+import org.yetiz.utils.hbase.exception.TypeNotFoundException;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;

@@ -2,8 +2,8 @@ package org.yetiz.utils.hbase;
 
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.yetiz.utils.exception.UnHandledException;
-import org.yetiz.utils.exception.YException;
+import org.yetiz.utils.hbase.exception.UnHandledException;
+import org.yetiz.utils.hbase.exception.YHBaseException;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -57,9 +57,9 @@ public class HBaseTable {
 		}
 	}
 
-	private YException convertedException(Throwable throwable) {
-		if (throwable instanceof YException) {
-			return (YException) throwable;
+	private YHBaseException convertedException(Throwable throwable) {
+		if (throwable instanceof YHBaseException) {
+			return (YHBaseException) throwable;
 		} else {
 			return new UnHandledException(throwable);
 		}

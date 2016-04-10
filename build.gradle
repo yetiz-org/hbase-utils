@@ -1,5 +1,5 @@
 group 'org.yetiz.utils'
-version '1.0'
+version '1.5.5.1'
 
 apply plugin: 'java'
 apply plugin: 'idea'
@@ -21,7 +21,6 @@ repositories {
 
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
-    compile project(':j-exception')
 
     // CDH HBase
     compile 'org.apache.hbase:hbase-client:1.0.0-cdh5.5.1'

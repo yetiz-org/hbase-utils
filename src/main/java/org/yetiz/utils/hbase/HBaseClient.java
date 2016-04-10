@@ -6,13 +6,13 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.client.coprocessor.AggregationClient;
 import org.slf4j.LoggerFactory;
-import org.yetiz.utils.exception.DataSourceException;
-import org.yetiz.utils.exception.UnHandledException;
-import org.yetiz.utils.exception.YException;
 import org.yetiz.utils.hbase.HBaseTable.Async;
 import org.yetiz.utils.hbase.HBaseTable.CallbackTask;
 import org.yetiz.utils.hbase.HBaseTable.ResultTask;
 import org.yetiz.utils.hbase.HBaseTable.Task;
+import org.yetiz.utils.hbase.exception.DataSourceException;
+import org.yetiz.utils.hbase.exception.UnHandledException;
+import org.yetiz.utils.hbase.exception.YHBaseException;
 
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -93,9 +93,9 @@ public class HBaseClient {
 		return connection;
 	}
 
-	private YException convertedException(Throwable throwable) {
-		if (throwable instanceof YException) {
-			return (YException) throwable;
+	private YHBaseException convertedException(Throwable throwable) {
+		if (throwable instanceof YHBaseException) {
+			return (YHBaseException) throwable;
 		} else {
 			return new UnHandledException(throwable);
 		}
