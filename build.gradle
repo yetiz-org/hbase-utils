@@ -15,10 +15,6 @@ targetCompatibility = 1.8
 repositories {
     mavenCentral()
 
-    maven {
-        url "https://repository.cloudera.com/artifactory/cloudera-repos/"
-    }
-
     flatDir {
         dirs 'libs'
     }
@@ -27,8 +23,7 @@ repositories {
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
 
-    // CDH HBase
-    compile 'org.apache.hbase:hbase-client:1.0.0-cdh5.5.1'
+    compile 'org.apache.hbase:hbase-client:1.0.0'
     // for Logging - start
     compile 'org.slf4j:slf4j-api:1.7.12'
     compile 'org.apache.logging.log4j:log4j-slf4j-impl:2.3'
