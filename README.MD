@@ -5,6 +5,23 @@
 
 Project for HBase operation, define a DAO model and wrap HBase operation. Create a easy way to do batch operation and other admin command.
 
+### Maven Repository
+
+Maven
+
+    <dependency>
+        <groupId>org.yetiz.utils</groupId>
+        <artifactId>hbase-utils</artifactId>
+        <version>1.5.5.1.1</version>
+    </dependency>
+
+Gradle
+
+    compile 'org.yetiz.utils:hbase-utils:1.5.5.1.1'
+
+
+### Example
+
 ```java
     HBaseClient client = HBaseClient.Builder
                          			.create()
