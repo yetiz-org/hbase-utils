@@ -1,8 +1,9 @@
 ![Maven Repository](https://maven-badges.herokuapp.com/maven-central/org.yetiz.utils/hbase-utils/badge.png)
+[![Build Status](https://travis-ci.org/yetiz-org/hbase-utils.svg?branch=master)](https://travis-ci.org/yetiz-org/hbase-utils)
 
 # HBase-Utils
 
-##  Project for HBase operation, define a DAO model and wrap HBase operation. Create a easy way to do batch operation and other admin command.
+Project for HBase operation, define a DAO model and wrap HBase operation. Create a easy way to do batch operation and other admin command.
 
 ```java
     HBaseClient client = HBaseClient.Builder

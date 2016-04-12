@@ -1,6 +1,5 @@
 group 'org.yetiz.utils'
 version '1.5.5.1.1'
-ext.isReleaseVersion = !version.endsWith("SNAPSHOT")
 
 apply plugin: 'java'
 apply plugin: 'idea'
@@ -98,11 +97,6 @@ artifacts {
 }
 
 
-signing {
-    required { isReleaseVersion && gradle.taskGraph.hasTask("uploadArchives") }
-    sign configurations.archives
-}
-
 uploadArchives {
     repositories {
         mavenDeployer {
@@ -145,4 +139,9 @@ uploadArchives {
             }
         }
     }
+
+    signing {
+//        sign configurations.archives
+    }
+
 }
