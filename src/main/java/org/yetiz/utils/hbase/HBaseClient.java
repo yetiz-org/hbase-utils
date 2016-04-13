@@ -5,10 +5,9 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.client.coprocessor.AggregationClient;
-import org.yetiz.utils.hbase.HBaseTable.Async;
-import org.yetiz.utils.hbase.HBaseTable.CallbackTask;
-import org.yetiz.utils.hbase.HBaseTable.ResultTask;
-import org.yetiz.utils.hbase.HBaseTable.Task;
+import org.yetiz.utils.hbase.HAsyncTable.CallbackTask;
+import org.yetiz.utils.hbase.HAsyncTable.ResultTask;
+import org.yetiz.utils.hbase.HAsyncTable.Task;
 import org.yetiz.utils.hbase.exception.DataSourceException;
 import org.yetiz.utils.hbase.exception.UnHandledException;
 import org.yetiz.utils.hbase.exception.YHBaseException;
@@ -32,7 +31,7 @@ public final class HBaseClient {
 	private static final AtomicLong count = new AtomicLong(0);
 	protected final HashMap<TableName, LinkedBlockingQueue<Row>>
 		fastCollection = new HashMap<>();
-	protected final HashMap<TableName, LinkedBlockingQueue<Async.AsyncPackage>>
+	protected final HashMap<TableName, LinkedBlockingQueue<HAsyncTable.AsyncPackage>>
 		asyncCollection = new HashMap<>();
 	private final boolean reproducible;
 	private volatile int fastBatchCount = DEFAULT_MAX_FAST_BATCH_COUNT;
@@ -47,6 +46,26 @@ public final class HBaseClient {
 
 	public static final byte[] bytes(String string) {
 		return string.getBytes(DEFAULT_CHARSET);
+	}
+
+	/**
+	 * Only for Get, Put, Delete, Append, Increment.<br>
+	 * With callback
+	 *
+	 * @return <code>Async</code>
+	 */
+	public HAsyncTable async(TableName tableName) {
+		return new HAsyncTable(asyncQueue(tableName));
+	}
+
+	/**
+	 * Only for Get, Put, Delete, Append, Increment.<br>
+	 * No callback, this is faster then <code>async()</code>
+	 *
+	 * @return <code>Fast</code>
+	 */
+	public HFastTable fast(TableName tableName) {
+		return new HFastTable(fastQueue(tableName));
 	}
 
 	public int fastBatchCount() {
@@ -139,7 +158,6 @@ public final class HBaseClient {
 			if (!isMaster) {
 				break;
 			}
-
 			rows = new ArrayList<>();
 		}
 	}
@@ -159,13 +177,13 @@ public final class HBaseClient {
 	}
 
 	private void asyncLoopTask(TableName tableName,
-	                           LinkedBlockingQueue<Async.AsyncPackage> asyncQueue,
+	                           LinkedBlockingQueue<HAsyncTable.AsyncPackage> asyncQueue,
 	                           boolean isMaster) {
-		List<Async.AsyncPackage> packages = new ArrayList<>();
+		List<HAsyncTable.AsyncPackage> packages = new ArrayList<>();
 
 		while (!closed()) {
 			try {
-				Async.AsyncPackage aPackage = asyncQueue.poll(1, TimeUnit.SECONDS);
+				HAsyncTable.AsyncPackage aPackage = asyncQueue.poll(1, TimeUnit.SECONDS);
 				if (aPackage == null) {
 					if (!isMaster) {
 						break;
@@ -184,7 +202,7 @@ public final class HBaseClient {
 					.forEach(asyncPackage -> rows.add(asyncPackage.action));
 
 				Object[] results = new Object[packages.size()];
-				Async.AsyncPackage[] packageArray = new Async.AsyncPackage[packages.size()];
+				HAsyncTable.AsyncPackage[] packageArray = new HAsyncTable.AsyncPackage[packages.size()];
 				packages.toArray(packageArray);
 
 				HBaseTable table = null;
@@ -199,7 +217,7 @@ public final class HBaseClient {
 					}
 				}
 
-				HashMap<Async.AsyncPackage, Object> invokes = new HashMap<>();
+				HashMap<HAsyncTable.AsyncPackage, Object> invokes = new HashMap<>();
 				for (int i = 0; i < results.length; i++) {
 					invokes.put(packageArray[i], results[i]);
 				}
@@ -229,11 +247,11 @@ public final class HBaseClient {
 		}
 	}
 
-	protected LinkedBlockingQueue<Async.AsyncPackage> asyncQueue(TableName tableName) {
+	protected LinkedBlockingQueue<HAsyncTable.AsyncPackage> asyncQueue(TableName tableName) {
 		if (!asyncCollection.containsKey(tableName)) {
 			synchronized (asyncCollection) {
 				if (!asyncCollection.containsKey(tableName)) {
-					LinkedBlockingQueue<Async.AsyncPackage> asyncQueue = new LinkedBlockingQueue<>();
+					LinkedBlockingQueue<HAsyncTable.AsyncPackage> asyncQueue = new LinkedBlockingQueue<>();
 					asyncCollection.put(tableName, asyncQueue);
 					EXECUTOR.execute(() -> asyncLoopTask(tableName, asyncQueue, true));
 				}
@@ -246,9 +264,7 @@ public final class HBaseClient {
 	public HBaseTable table(TableName tableName) {
 		try {
 			return new HBaseTable(tableName,
-				connection().getTable(tableName.get()),
-				asyncQueue(tableName),
-				fastQueue(tableName));
+				connection().getTable(tableName.get()));
 		} catch (Throwable throwable) {
 			throw convertedException(throwable);
 		}

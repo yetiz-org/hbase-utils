@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Consumer;
 
 /**
@@ -18,18 +17,12 @@ import java.util.function.Consumer;
 public class HBaseTable {
 	private final Table table;
 	private final TableName tableName;
-	private final Async async;
-	private final Fast fast;
 	private final Model model;
 
 	protected HBaseTable(TableName tableName,
-	                     Table table,
-	                     LinkedBlockingQueue<Async.AsyncPackage> asyncQueue,
-	                     LinkedBlockingQueue<Row> fastQueue) {
+	                     Table table) {
 		this.tableName = tableName;
 		this.table = table;
-		this.async = new Async(asyncQueue);
-		this.fast = new Fast(fastQueue);
 		this.model = new Model();
 	}
 
@@ -164,98 +157,6 @@ public class HBaseTable {
 			table().batchCallback(actions, results, callback);
 		} catch (Throwable throwable) {
 			throw convertedException(throwable);
-		}
-	}
-
-	/**
-	 * Only for Get, Put, Delete, Append, Increment.<br>
-	 * With callback
-	 *
-	 * @return <code>Async</code>
-	 */
-	public Async async() {
-		return async;
-	}
-
-	/**
-	 * Only for Get, Put, Delete, Append, Increment.<br>
-	 * No callback, this is faster then <code>async()</code>
-	 *
-	 * @return <code>Fast</code>
-	 */
-	public Fast fast() {
-		return fast;
-	}
-
-
-	public interface Task {
-	}
-
-	public interface ResultTask extends Task {
-		void callback(Result result);
-	}
-
-	public interface CallbackTask extends Task {
-		void callback();
-	}
-
-	public static class Fast {
-		private LinkedBlockingQueue<Row> fastQueue;
-
-		public Fast(LinkedBlockingQueue<Row> fastQueue) {
-			this.fastQueue = fastQueue;
-		}
-
-		public void go(Row action) {
-			fastQueue.offer(action);
-		}
-
-		public void go(List<Row> actions) {
-			fastQueue.addAll(actions);
-		}
-	}
-
-	public static class Async {
-
-		private LinkedBlockingQueue<AsyncPackage> asyncQueue;
-
-		public Async(LinkedBlockingQueue<AsyncPackage> asyncQueue) {
-			this.asyncQueue = asyncQueue;
-		}
-
-		public void get(Get get, ResultTask callback) {
-			asyncQueue.offer(new AsyncPackage(get, callback));
-		}
-
-		public void append(Append append, ResultTask callback) {
-			asyncQueue.offer(new AsyncPackage(append, callback));
-		}
-
-		public void increment(Increment increment, ResultTask callback) {
-			asyncQueue.offer(new AsyncPackage(increment, callback));
-		}
-
-		public void put(Put put, CallbackTask callback) {
-			asyncQueue.offer(new AsyncPackage(put, callback));
-		}
-
-		public void delete(Delete delete, CallbackTask callback) {
-			asyncQueue.offer(new AsyncPackage(delete, callback));
-		}
-
-		public void batch(List<Row> rows, ResultTask task) {
-			rows.parallelStream()
-				.forEach(row -> asyncQueue.offer(new AsyncPackage(row, task)));
-		}
-
-		public class AsyncPackage {
-			protected Row action;
-			protected Task callback;
-
-			public AsyncPackage(Row action, Task callback) {
-				this.action = action;
-				this.callback = callback;
-			}
 		}
 	}
 
