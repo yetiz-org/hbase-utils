@@ -5,7 +5,6 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.client.coprocessor.AggregationClient;
-import org.slf4j.LoggerFactory;
 import org.yetiz.utils.hbase.HBaseTable.Async;
 import org.yetiz.utils.hbase.HBaseTable.CallbackTask;
 import org.yetiz.utils.hbase.HBaseTable.ResultTask;
@@ -19,29 +18,31 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Created by yeti on 16/4/1.
  */
-public class HBaseClient {
+public final class HBaseClient {
 	public static final Charset DEFAULT_CHARSET = Charset.forName("utf-8");
-	public static final int DEFAULT_INVOKER_COUNT = 1;
 	private static final int DEFAULT_MAX_FAST_BATCH_COUNT = 5000;
 	private static final int DEFAULT_MAX_ASYNC_BATCH_COUNT = 5000;
-	private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
-	protected final ConcurrentHashMap<TableName, LinkedBlockingQueue<Row>>
-		fastCollection = new ConcurrentHashMap<>();
-	protected final ConcurrentHashMap<TableName, LinkedBlockingQueue<Async.AsyncPackage>>
-		asyncPackages = new ConcurrentHashMap<>();
-	private final int invokerCount;
+	private static final ExecutorService EXECUTOR =
+		new ThreadPoolExecutor(0, Integer.MAX_VALUE, 5L, TimeUnit.SECONDS, new SynchronousQueue<>());
+	private static final AtomicLong count = new AtomicLong(0);
+	protected final HashMap<TableName, LinkedBlockingQueue<Row>>
+		fastCollection = new HashMap<>();
+	protected final HashMap<TableName, LinkedBlockingQueue<Async.AsyncPackage>>
+		asyncCollection = new HashMap<>();
+	private final boolean reproducible;
 	private volatile int fastBatchCount = DEFAULT_MAX_FAST_BATCH_COUNT;
 	private volatile int asyncBatchCount = DEFAULT_MAX_ASYNC_BATCH_COUNT;
-	private boolean closed = false;
+	private volatile boolean closed = false;
 	private Connection connection;
 	private Configuration configuration = HBaseConfiguration.create();
 
-	private HBaseClient(int invokerCount) {
-		this.invokerCount = invokerCount;
+	private HBaseClient(boolean reproducible) {
+		this.reproducible = reproducible;
 	}
 
 	public static final byte[] bytes(String string) {
@@ -68,9 +69,6 @@ public class HBaseClient {
 
 	private void init() {
 		this.connection = newConnection();
-		for (int i = 0; i < invokerCount; i++) {
-			new MiniConsumer(this).start();
-		}
 	}
 
 	private Connection newConnection() {
@@ -99,16 +97,158 @@ public class HBaseClient {
 		}
 	}
 
-	public boolean isClosed() {
+	public boolean closed() {
 		return this.closed;
+	}
+
+	private void fastLoopTask(TableName tableName, LinkedBlockingQueue<Row> fastQueue, boolean isMaster) {
+		List<Row> rows = new ArrayList<>();
+		Long id = count.getAndIncrement();
+
+		while (!closed()) {
+			try {
+				Row row = fastQueue.poll(1, TimeUnit.SECONDS);
+				if (row == null) {
+					if (!isMaster) {
+						break;
+					}
+
+					continue;
+				}
+
+				rows.add(row);
+				if (fastQueue.drainTo(rows, fastBatchCount()) == fastBatchCount() && reproducible) {
+					EXECUTOR.execute(() -> fastLoopTask(tableName, fastQueue, false));
+				}
+
+				Object[] results = new Object[rows.size()];
+				HBaseTable table = null;
+				try {
+					table = table(tableName);
+					table.batch(rows, results);
+				} catch (Throwable throwable) {
+					throw convertedException(throwable);
+				} finally {
+					if (table != null) {
+						table.close();
+					}
+				}
+			} catch (Throwable throwable) {
+			}
+
+			if (!isMaster) {
+				break;
+			}
+
+			rows = new ArrayList<>();
+		}
+	}
+
+	protected LinkedBlockingQueue<Row> fastQueue(TableName tableName) {
+		if (!fastCollection.containsKey(tableName)) {
+			synchronized (fastCollection) {
+				if (!fastCollection.containsKey(tableName)) {
+					LinkedBlockingQueue<Row> fastQueue = new LinkedBlockingQueue<>();
+					fastCollection.put(tableName, fastQueue);
+					EXECUTOR.execute(() -> fastLoopTask(tableName, fastQueue, true));
+				}
+			}
+		}
+
+		return fastCollection.get(tableName);
+	}
+
+	private void asyncLoopTask(TableName tableName,
+	                           LinkedBlockingQueue<Async.AsyncPackage> asyncQueue,
+	                           boolean isMaster) {
+		List<Async.AsyncPackage> packages = new ArrayList<>();
+
+		while (!closed()) {
+			try {
+				Async.AsyncPackage aPackage = asyncQueue.poll(1, TimeUnit.SECONDS);
+				if (aPackage == null) {
+					if (!isMaster) {
+						break;
+					}
+
+					continue;
+				}
+
+				packages.add(aPackage);
+				if (asyncQueue.drainTo(packages, asyncBatchCount()) == asyncBatchCount() && reproducible) {
+					EXECUTOR.execute(() -> asyncLoopTask(tableName, asyncQueue, false));
+				}
+
+				List<Row> rows = new ArrayList<>();
+				packages.stream()
+					.forEach(asyncPackage -> rows.add(asyncPackage.action));
+
+				Object[] results = new Object[packages.size()];
+				Async.AsyncPackage[] packageArray = new Async.AsyncPackage[packages.size()];
+				packages.toArray(packageArray);
+
+				HBaseTable table = null;
+				try {
+					table = table(tableName);
+					table.batch(rows, results);
+				} catch (Throwable throwable) {
+					throw convertedException(throwable);
+				} finally {
+					if (table != null) {
+						table.close();
+					}
+				}
+
+				HashMap<Async.AsyncPackage, Object> invokes = new HashMap<>();
+				for (int i = 0; i < results.length; i++) {
+					invokes.put(packageArray[i], results[i]);
+				}
+
+				invokes.entrySet()
+					.parallelStream()
+					.forEach(entry -> {
+						Task task = entry.getKey().callback;
+						if (task == null) {
+							return;
+						}
+
+						if (task instanceof ResultTask) {
+							((ResultTask) task).callback(((Result) entry.getValue()));
+						}
+
+						if (task instanceof CallbackTask) {
+							((CallbackTask) task).callback();
+						}
+					});
+			} catch (Throwable throwable) {
+			}
+
+			if (!isMaster) {
+				break;
+			}
+		}
+	}
+
+	protected LinkedBlockingQueue<Async.AsyncPackage> asyncQueue(TableName tableName) {
+		if (!asyncCollection.containsKey(tableName)) {
+			synchronized (asyncCollection) {
+				if (!asyncCollection.containsKey(tableName)) {
+					LinkedBlockingQueue<Async.AsyncPackage> asyncQueue = new LinkedBlockingQueue<>();
+					asyncCollection.put(tableName, asyncQueue);
+					EXECUTOR.execute(() -> asyncLoopTask(tableName, asyncQueue, true));
+				}
+			}
+		}
+
+		return asyncCollection.get(tableName);
 	}
 
 	public HBaseTable table(TableName tableName) {
 		try {
 			return new HBaseTable(tableName,
 				connection().getTable(tableName.get()),
-				asyncPackages,
-				fastCollection);
+				asyncQueue(tableName),
+				fastQueue(tableName));
 		} catch (Throwable throwable) {
 			throw convertedException(throwable);
 		}
@@ -142,115 +282,6 @@ public class HBaseClient {
 		return configuration;
 	}
 
-	public static class MiniConsumer extends Thread {
-		private HBaseClient client;
-
-		public MiniConsumer(HBaseClient client) {
-			this.client = client;
-		}
-
-		@Override
-		public void run() {
-			while (!client.isClosed()) {
-				try {
-					drainFast();
-				} catch (Throwable throwable) {
-					LoggerFactory.getLogger(MiniConsumer.class).error("drainFast exception occur.", throwable);
-				}
-
-				try {
-					drainAsync();
-					Thread.sleep(100);
-				} catch (InterruptedException e) {
-				} catch (Throwable throwable) {
-					LoggerFactory.getLogger(MiniConsumer.class).error("drainAsync exception occur.", throwable);
-				}
-			}
-		}
-
-		private void drainFast() {
-			client.fastCollection
-				.entrySet()
-				.parallelStream()
-				.forEach(pair -> {
-					List<Row> rows = new ArrayList<>();
-					pair.getValue().drainTo(rows, client.fastBatchCount);
-					if (rows.isEmpty()) {
-						return;
-					}
-
-					Object[] results = new Object[rows.size()];
-					Connection connection = null;
-					try {
-						client.table(pair.getKey()).batch(rows, results);
-					} catch (Throwable throwable) {
-						throw client.convertedException(throwable);
-					} finally {
-						try {
-							connection.close();
-						} catch (Throwable throwable) {
-						}
-					}
-				});
-		}
-
-		private void drainAsync() {
-			client.asyncPackages
-				.entrySet()
-				.parallelStream()
-				.forEach(pair -> {
-					List<Async.AsyncPackage> packages = new ArrayList<>();
-					List<Row> rows = new ArrayList<>();
-					pair.getValue().drainTo(packages, client.asyncBatchCount);
-					if (packages.isEmpty()) {
-						return;
-					}
-
-					packages.stream()
-						.forEach(asyncPackage -> rows.add(asyncPackage.action));
-
-					Object[] results = new Object[packages.size()];
-					Async.AsyncPackage[] packageArray = new Async.AsyncPackage[packages.size()];
-					packages.toArray(packageArray);
-
-					Connection connection = null;
-					try {
-						connection = client.newConnection();
-						client.table(pair.getKey()).batch(rows, results);
-					} catch (Throwable throwable) {
-						throw client.convertedException(throwable);
-					} finally {
-						try {
-							connection.close();
-						} catch (Throwable throwable) {
-						}
-					}
-
-					HashMap<Async.AsyncPackage, Object> invokes = new HashMap<>();
-					for (int i = 0; i < results.length; i++) {
-						invokes.put(packageArray[i], results[i]);
-					}
-
-					invokes.entrySet()
-						.parallelStream()
-						.forEach(entry -> {
-							Task task = entry.getKey().callback;
-							if (task == null) {
-								return;
-							}
-
-							if (task instanceof ResultTask) {
-								((ResultTask) task).callback(((Result) entry.getValue()));
-							}
-
-							if (task instanceof CallbackTask) {
-								((CallbackTask) task).callback();
-							}
-						});
-				});
-		}
-	}
-
 	public static class Parameter {
 		public static final Parameter ZK_QUORUM =
 			new Parameter(HConstants.ZOOKEEPER_QUORUM);
@@ -277,12 +308,16 @@ public class HBaseClient {
 		private HBaseClient hBaseClient;
 
 		public static final Builder create() {
-			return create(DEFAULT_INVOKER_COUNT);
+			return create(true);
 		}
 
-		public static final Builder create(int invokerCount) {
+		/**
+		 * @param reproducible reproduce worker when fast or async worker is busy.
+		 * @return
+		 */
+		public static final Builder create(boolean reproducible) {
 			Builder builder = new Builder();
-			builder.hBaseClient = new HBaseClient(invokerCount);
+			builder.hBaseClient = new HBaseClient(reproducible);
 			return builder;
 		}
 

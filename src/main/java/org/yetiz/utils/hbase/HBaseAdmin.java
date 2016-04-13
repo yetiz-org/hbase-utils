@@ -73,6 +73,14 @@ public class HBaseAdmin {
 		}
 	}
 
+	public void close() {
+		try {
+			admin().close();
+		} catch (Throwable throwable) {
+			throw new UnHandledException(throwable);
+		}
+	}
+
 	public void cloneSnapshot(String snapshotName, TableName tableName) {
 		try {
 			admin().cloneSnapshot(snapshotName, tableName.get());

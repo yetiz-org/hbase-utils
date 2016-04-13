@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Consumer;
 
@@ -25,12 +24,12 @@ public class HBaseTable {
 
 	protected HBaseTable(TableName tableName,
 	                     Table table,
-	                     ConcurrentHashMap<TableName, LinkedBlockingQueue<Async.AsyncPackage>> asyncPackages,
-	                     ConcurrentHashMap<TableName, LinkedBlockingQueue<Row>> fastCollection) {
+	                     LinkedBlockingQueue<Async.AsyncPackage> asyncQueue,
+	                     LinkedBlockingQueue<Row> fastQueue) {
 		this.tableName = tableName;
 		this.table = table;
-		this.async = new Async(tableName, asyncPackages);
-		this.fast = new Fast(tableName, fastCollection);
+		this.async = new Async(asyncQueue);
+		this.fast = new Fast(fastQueue);
 		this.model = new Model();
 	}
 
@@ -38,10 +37,11 @@ public class HBaseTable {
 		return model;
 	}
 
-	public void release() {
+	public void close() {
 		try {
 			table().close();
-		} catch (IOException e) {
+		} catch (Throwable throwable) {
+			throw convertedException(throwable);
 		}
 	}
 
@@ -49,19 +49,19 @@ public class HBaseTable {
 		return table;
 	}
 
-	public boolean exists(Get get) {
-		try {
-			return table().exists(get);
-		} catch (Throwable throwable) {
-			throw convertedException(throwable);
-		}
-	}
-
 	private YHBaseException convertedException(Throwable throwable) {
 		if (throwable instanceof YHBaseException) {
 			return (YHBaseException) throwable;
 		} else {
 			return new UnHandledException(throwable);
+		}
+	}
+
+	public boolean exists(Get get) {
+		try {
+			return table().exists(get);
+		} catch (Throwable throwable) {
+			throw convertedException(throwable);
 		}
 	}
 
@@ -200,75 +200,52 @@ public class HBaseTable {
 	}
 
 	public static class Fast {
-		private TableName tableName;
-		private ConcurrentHashMap<TableName, LinkedBlockingQueue<Row>> fastCollection;
+		private LinkedBlockingQueue<Row> fastQueue;
 
-		public Fast(TableName tableName,
-		            ConcurrentHashMap<TableName, LinkedBlockingQueue<Row>> fastCollection) {
-			this.tableName = tableName;
-			this.fastCollection = fastCollection;
+		public Fast(LinkedBlockingQueue<Row> fastQueue) {
+			this.fastQueue = fastQueue;
 		}
-
 
 		public void go(Row action) {
-			rows(tableName).offer(action);
-		}
-
-		private LinkedBlockingQueue<Row> rows(TableName tableName) {
-			if (!fastCollection.containsKey(tableName)) {
-				fastCollection.put(tableName, new LinkedBlockingQueue<>());
-			}
-
-			return fastCollection.get(tableName);
+			fastQueue.offer(action);
 		}
 
 		public void go(List<Row> actions) {
-			rows(tableName).addAll(actions);
+			fastQueue.addAll(actions);
 		}
 	}
 
 	public static class Async {
 
-		private TableName tableName;
-		private ConcurrentHashMap<TableName, LinkedBlockingQueue<AsyncPackage>> asyncPackages;
+		private LinkedBlockingQueue<AsyncPackage> asyncQueue;
 
-		public Async(TableName tableName,
-		             ConcurrentHashMap<TableName, LinkedBlockingQueue<AsyncPackage>> asyncPackages) {
-			this.tableName = tableName;
-			this.asyncPackages = asyncPackages;
+		public Async(LinkedBlockingQueue<AsyncPackage> asyncQueue) {
+			this.asyncQueue = asyncQueue;
 		}
 
 		public void get(Get get, ResultTask callback) {
-			packages(tableName).offer(new AsyncPackage(get, callback));
-		}
-
-		private LinkedBlockingQueue<AsyncPackage> packages(TableName tableName) {
-			if (!asyncPackages.containsKey(tableName)) {
-				asyncPackages.put(tableName, new LinkedBlockingQueue<>());
-			}
-
-			return asyncPackages.get(tableName);
+			asyncQueue.offer(new AsyncPackage(get, callback));
 		}
 
 		public void append(Append append, ResultTask callback) {
-			packages(tableName).offer(new AsyncPackage(append, callback));
+			asyncQueue.offer(new AsyncPackage(append, callback));
 		}
 
 		public void increment(Increment increment, ResultTask callback) {
-			packages(tableName).offer(new AsyncPackage(increment, callback));
+			asyncQueue.offer(new AsyncPackage(increment, callback));
 		}
 
 		public void put(Put put, CallbackTask callback) {
-			packages(tableName).offer(new AsyncPackage(put, callback));
+			asyncQueue.offer(new AsyncPackage(put, callback));
 		}
 
 		public void delete(Delete delete, CallbackTask callback) {
-			packages(tableName).offer(new AsyncPackage(delete, callback));
+			asyncQueue.offer(new AsyncPackage(delete, callback));
 		}
 
 		public void batch(List<Row> rows, ResultTask task) {
 			rows.parallelStream()
-				.forEach(row -> packages(tableName).offer(new AsyncPackage(row, task)));
+				.forEach(row -> asyncQueue.offer(new AsyncPackage(row, task)));
 		}
 
 		public class AsyncPackage {
