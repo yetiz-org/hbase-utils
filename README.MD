@@ -44,9 +44,9 @@ Gradle
 	tableNames.parallelStream()
 		.forEach(tableName -> {
 			HBaseTable table = client.table(tableName);
-			table.fast().go(fastPuts);
-			table.async().batch(asyncPuts, result -> System.out.println("OK"));
-			});
+			client.fast(tableName).go(fastPuts);
+			client.async(tableName).batch(asyncPuts, result -> System.out.println("OK"));
+		});
 
 	client.table(HTableModel.tableName(Account.class))
 		.model()
