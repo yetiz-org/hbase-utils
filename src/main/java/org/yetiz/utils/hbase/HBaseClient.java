@@ -18,8 +18,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.*;
 
 /**
  * Created by yeti on 16/4/1.
@@ -27,13 +26,16 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class HBaseClient {
 	public static final Charset DEFAULT_CHARSET = Charset.forName("utf-8");
 	public static final int DEFAULT_INVOKER_COUNT = 1;
-	private static final int MAX_FAST_BATCH_SIZE = 5000;
-	private static final int MAX_ASYNC_BATCH_SIZE = 5000;
+	private static final int DEFAULT_MAX_FAST_BATCH_COUNT = 5000;
+	private static final int DEFAULT_MAX_ASYNC_BATCH_COUNT = 5000;
+	private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
 	protected final ConcurrentHashMap<TableName, LinkedBlockingQueue<Row>>
 		fastCollection = new ConcurrentHashMap<>();
 	protected final ConcurrentHashMap<TableName, LinkedBlockingQueue<Async.AsyncPackage>>
 		asyncPackages = new ConcurrentHashMap<>();
 	private final int invokerCount;
+	private volatile int fastBatchCount = DEFAULT_MAX_FAST_BATCH_COUNT;
+	private volatile int asyncBatchCount = DEFAULT_MAX_ASYNC_BATCH_COUNT;
 	private boolean closed = false;
 	private Connection connection;
 	private Configuration configuration = HBaseConfiguration.create();
@@ -44,6 +46,24 @@ public class HBaseClient {
 
 	public static final byte[] bytes(String string) {
 		return string.getBytes(DEFAULT_CHARSET);
+	}
+
+	public int fastBatchCount() {
+		return fastBatchCount;
+	}
+
+	public HBaseClient setFastBatchCount(int fastBatchCount) {
+		this.fastBatchCount = fastBatchCount;
+		return this;
+	}
+
+	public int asyncBatchCount() {
+		return asyncBatchCount;
+	}
+
+	public HBaseClient setAsyncBatchCount(int asyncBatchCount) {
+		this.asyncBatchCount = asyncBatchCount;
+		return this;
 	}
 
 	private void init() {
@@ -72,6 +92,11 @@ public class HBaseClient {
 
 	public void close() {
 		this.closed = true;
+		try {
+			EXECUTOR.shutdown();
+			while (!EXECUTOR.awaitTermination(1, TimeUnit.SECONDS)) ;
+		} catch (InterruptedException e) {
+		}
 	}
 
 	public boolean isClosed() {
@@ -149,7 +174,7 @@ public class HBaseClient {
 				.parallelStream()
 				.forEach(pair -> {
 					List<Row> rows = new ArrayList<>();
-					pair.getValue().drainTo(rows, MAX_FAST_BATCH_SIZE);
+					pair.getValue().drainTo(rows, client.fastBatchCount);
 					if (rows.isEmpty()) {
 						return;
 					}
@@ -176,7 +201,7 @@ public class HBaseClient {
 				.forEach(pair -> {
 					List<Async.AsyncPackage> packages = new ArrayList<>();
 					List<Row> rows = new ArrayList<>();
-					pair.getValue().drainTo(packages, MAX_ASYNC_BATCH_SIZE);
+					pair.getValue().drainTo(packages, client.asyncBatchCount);
 					if (packages.isEmpty()) {
 						return;
 					}

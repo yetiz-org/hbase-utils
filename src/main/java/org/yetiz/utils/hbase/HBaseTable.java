@@ -209,6 +209,7 @@ public class HBaseTable {
 			this.fastCollection = fastCollection;
 		}
 
+
 		public void go(Row action) {
 			rows(tableName).offer(action);
 		}
