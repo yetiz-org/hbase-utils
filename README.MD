@@ -7,17 +7,34 @@ Project for HBase operation, define a DAO model and wrap HBase operation. Create
 
 ### Maven Repository
 
+## Apache HBase Version
+
 Maven
 
     <dependency>
         <groupId>org.yetiz.utils</groupId>
         <artifactId>hbase-utils</artifactId>
-        <version>1.5.5.1.1</version>
+        <version>2.1.0.0.0</version>
     </dependency>
 
 Gradle
 
-    compile 'org.yetiz.utils:hbase-utils:1.5.5.1.1'
+    compile 'org.yetiz.utils:hbase-utils:2.1.0.0.0'
+
+## CDH Version
+
+Maven
+
+    <dependency>
+        <groupId>org.yetiz.utils</groupId>
+        <artifactId>hbase-utils</artifactId>
+        <version>2.1.0.0.0-cdh5.5.1</version>
+    </dependency>
+
+Gradle
+
+    compile 'org.yetiz.utils:hbase-utils:2.1.0.0.0-cdh5.5.1'
+
 
 
 ### Example
