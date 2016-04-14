@@ -5,6 +5,8 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.client.coprocessor.AggregationClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.yetiz.utils.hbase.HAsyncTable.CallbackTask;
 import org.yetiz.utils.hbase.HAsyncTable.ResultTask;
 import org.yetiz.utils.hbase.HAsyncTable.Task;
@@ -28,14 +30,16 @@ public final class HBaseClient {
 	private static final int DEFAULT_MAX_ASYNC_BATCH_COUNT = 5000;
 	private static final ExecutorService EXECUTOR =
 		new ThreadPoolExecutor(0, Integer.MAX_VALUE, 5L, TimeUnit.SECONDS, new SynchronousQueue<>());
-	private static final AtomicLong count = new AtomicLong(0);
+	private static final AtomicLong INCREMENT_ID = new AtomicLong(0);
 	protected final HashMap<TableName, LinkedBlockingQueue<Row>>
 		fastCollection = new HashMap<>();
 	protected final HashMap<TableName, LinkedBlockingQueue<HAsyncTable.AsyncPackage>>
 		asyncCollection = new HashMap<>();
 	private final boolean reproducible;
-	private volatile int fastBatchCount = DEFAULT_MAX_FAST_BATCH_COUNT;
-	private volatile int asyncBatchCount = DEFAULT_MAX_ASYNC_BATCH_COUNT;
+	private final String id = String.format("%s-%d", HBaseClient.class.getName(), INCREMENT_ID.getAndIncrement());
+	private final Logger logger = LoggerFactory.getLogger(id);
+	private volatile int fastBatchCount = DEFAULT_MAX_FAST_BATCH_COUNT - 1;
+	private volatile int asyncBatchCount = DEFAULT_MAX_ASYNC_BATCH_COUNT - 1;
 	private volatile boolean closed = false;
 	private Connection connection;
 	private Configuration configuration = HBaseConfiguration.create();
@@ -73,7 +77,7 @@ public final class HBaseClient {
 	}
 
 	public HBaseClient setFastBatchCount(int fastBatchCount) {
-		this.fastBatchCount = fastBatchCount;
+		this.fastBatchCount = fastBatchCount - 1;
 		return this;
 	}
 
@@ -82,7 +86,7 @@ public final class HBaseClient {
 	}
 
 	public HBaseClient setAsyncBatchCount(int asyncBatchCount) {
-		this.asyncBatchCount = asyncBatchCount;
+		this.asyncBatchCount = asyncBatchCount - 1;
 		return this;
 	}
 
@@ -108,12 +112,18 @@ public final class HBaseClient {
 	}
 
 	public void close() {
+		logger.debug("Close " + id());
 		this.closed = true;
 		try {
 			EXECUTOR.shutdown();
 			while (!EXECUTOR.awaitTermination(1, TimeUnit.SECONDS)) ;
 		} catch (InterruptedException e) {
 		}
+		logger.debug(id() + " Closed");
+	}
+
+	private String id() {
+		return id;
 	}
 
 	public boolean closed() {
@@ -122,7 +132,6 @@ public final class HBaseClient {
 
 	private void fastLoopTask(TableName tableName, LinkedBlockingQueue<Row> fastQueue, boolean isMaster) {
 		List<Row> rows = new ArrayList<>();
-		Long id = count.getAndIncrement();
 
 		while (!closed()) {
 			try {
