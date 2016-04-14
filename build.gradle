@@ -1,5 +1,5 @@
 group 'org.yetiz.utils'
-version '2.1.0.0.0'
+version '2.0.98.6.0'
 
 apply plugin: 'java'
 apply plugin: 'idea'
@@ -29,7 +29,8 @@ dependencies {
     // CDH HBase
 //    compile 'org.apache.hbase:hbase-client:1.0.0-cdh5.5.1'
     // Apache
-    compile 'org.apache.hbase:hbase-client:1.0.0'
+//    compile 'org.apache.hbase:hbase-client:1.0.0'
+    compile 'org.apache.hbase:hbase-client:0.98.6.1-hadoop2'
     // for Logging - start
     compile 'org.slf4j:slf4j-api:1.7.12'
     compile 'org.apache.logging.log4j:log4j-slf4j-impl:2.3'

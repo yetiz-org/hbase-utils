@@ -3,6 +3,7 @@ package org.yetiz.utils.hbase;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.client.coprocessor.AggregationClient;
 import org.slf4j.Logger;
@@ -41,7 +42,7 @@ public final class HBaseClient {
 	private volatile int fastBatchCount = DEFAULT_MAX_FAST_BATCH_COUNT - 1;
 	private volatile int asyncBatchCount = DEFAULT_MAX_ASYNC_BATCH_COUNT - 1;
 	private volatile boolean closed = false;
-	private Connection connection;
+	private HConnection connection;
 	private Configuration configuration = HBaseConfiguration.create();
 
 	private HBaseClient(boolean reproducible) {
@@ -94,18 +95,18 @@ public final class HBaseClient {
 		this.connection = newConnection();
 	}
 
-	private Connection newConnection() {
+	private HConnection newConnection() {
 		try {
-			Connection connection = ConnectionFactory.createConnection(configuration);
+			HConnection connection = HConnectionManager.createConnection(configuration());
 			return connection;
 		} catch (Exception e) {
 			throw new DataSourceException(e);
 		}
 	}
 
-	public HBaseAdmin admin() {
+	public org.yetiz.utils.hbase.HBaseAdmin admin() {
 		try {
-			return new HBaseAdmin(connection.getAdmin());
+			return new org.yetiz.utils.hbase.HBaseAdmin(new HBaseAdmin(configuration()));
 		} catch (Exception e) {
 			throw new DataSourceException(e);
 		}
@@ -279,7 +280,7 @@ public final class HBaseClient {
 		}
 	}
 
-	protected Connection connection() {
+	protected HConnection connection() {
 		return connection;
 	}
 
