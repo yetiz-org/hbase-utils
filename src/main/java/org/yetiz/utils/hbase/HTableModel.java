@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.commons.collections.map.UnmodifiableMap;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
@@ -20,10 +21,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Stream;
 
 /**
@@ -31,9 +29,9 @@ import java.util.stream.Stream;
  */
 public abstract class HTableModel<T extends HTableModel> {
 	protected static final ObjectMapper JSON_MAPPER = new ObjectMapper(new JsonFactory());
-	protected static final HashMap<TableName, HashMap<String, Qualifier>>
+	private static final HashMap<TableName, HashMap<String, Qualifier>>
 		ModelQualifiers = new HashMap<>();
-	protected static final HashMap<TableName, HashMap<String, Family>>
+	private static final HashMap<TableName, HashMap<String, Family>>
 		ModelFamilies = new HashMap<>();
 	private static final HashMap<Class<? extends HTableModel>, TableName>
 		ModelTableNameMaps = new HashMap<>();
@@ -64,6 +62,26 @@ public abstract class HTableModel<T extends HTableModel> {
 	public HTableModel() {
 		isResult = false;
 		setValues = new HashMap<>();
+	}
+
+	/**
+	 * get <code>Qualifier</code> by method name, this is readonly map
+	 *
+	 * @param tableName
+	 * @return
+	 */
+	public static final Map<String, Qualifier> qualifiers(TableName tableName) {
+		return UnmodifiableMap.decorate(ModelQualifiers.get(tableName));
+	}
+
+	/**
+	 * get <code>Family</code> by method name, this is readonly map
+	 *
+	 * @param tableName
+	 * @return
+	 */
+	public static final Map<String, Family> families(TableName tableName) {
+		return UnmodifiableMap.decorate(ModelFamilies.get(tableName));
 	}
 
 	public static final TableName tableName(Class<? extends HTableModel> type) {
@@ -174,10 +192,10 @@ public abstract class HTableModel<T extends HTableModel> {
 		familyMaps.entrySet()
 			.stream()
 			.forEach(entry -> families
-				.add(JSON_MAPPER.createObjectNode()
-					.put("family", entry.getKey())
-					.put("compression", familyComp.get(entry.getKey()))
-					.set("qualifiers", entry.getValue()))
+					.add(JSON_MAPPER.createObjectNode()
+						.put("family", entry.getKey())
+						.put("compression", familyComp.get(entry.getKey()))
+						.set("qualifiers", entry.getValue()))
 			);
 
 		root.set("families", families);
@@ -351,6 +369,10 @@ public abstract class HTableModel<T extends HTableModel> {
 	}
 
 	public static final byte[] byteValue(Object object) {
+		if (object instanceof CharSequence) {
+			return object.toString().getBytes(HBaseClient.DEFAULT_CHARSET);
+		}
+
 		if (object instanceof String) {
 			return ((String) object).getBytes(HBaseClient.DEFAULT_CHARSET);
 		}
