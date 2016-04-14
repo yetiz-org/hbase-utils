@@ -1,5 +1,5 @@
 group 'org.yetiz.utils'
-version '1.5.5.1.2'
+version '2.1.0.0.0'
 
 apply plugin: 'java'
 apply plugin: 'idea'
@@ -148,7 +148,7 @@ uploadArchives {
     }
 
     signing {
-//        sign configurations.archives
+        sign configurations.archives
     }
 
 }
