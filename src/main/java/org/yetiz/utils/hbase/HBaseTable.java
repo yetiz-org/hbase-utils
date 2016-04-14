@@ -15,13 +15,13 @@ import java.util.function.Consumer;
  * Created by yeti on 16/4/5.
  */
 public class HBaseTable {
-	private final Table table;
+	private final HTableInterface table;
 	private final TableName tableName;
 	private final Model model;
 	private boolean closed = false;
 
 	protected HBaseTable(TableName tableName,
-	                     Table table) {
+	                     HTableInterface table) {
 		this.tableName = tableName;
 		this.table = table;
 		this.model = new Model();
@@ -41,7 +41,7 @@ public class HBaseTable {
 		}
 	}
 
-	private Table table() {
+	private HTableInterface table() {
 		return table;
 	}
 
@@ -67,7 +67,12 @@ public class HBaseTable {
 
 	public boolean[] exists(List<Get> gets) {
 		try {
-			return table().existsAll(gets);
+			Boolean[] tmp = table().exists(gets);
+			boolean[] rtn = new boolean[tmp.length];
+			for (int i = 0; i < tmp.length; i++) {
+				rtn[i] = tmp[i];
+			}
+			return rtn;
 		} catch (Throwable throwable) {
 			throw convertedException(throwable);
 		}

@@ -325,7 +325,7 @@ public abstract class HTableModel<T extends HTableModel> {
 
 		setValues.values()
 			.stream()
-			.forEach(pack -> put.addColumn(byteValue(pack.family), byteValue(pack.qualifier), pack.value));
+			.forEach(pack -> put.add(byteValue(pack.family), byteValue(pack.qualifier), pack.value));
 		return put;
 	}
 

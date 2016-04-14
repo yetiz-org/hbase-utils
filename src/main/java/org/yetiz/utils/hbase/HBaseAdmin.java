@@ -2,13 +2,9 @@ package org.yetiz.utils.hbase;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
-import org.yetiz.utils.hbase.exception.CatcherRaiseException;
-import org.yetiz.utils.hbase.exception.DuplicateException;
-import org.yetiz.utils.hbase.exception.UnHandledException;
-import org.yetiz.utils.hbase.exception.YHBaseException;
+import org.yetiz.utils.hbase.exception.*;
 
 import java.util.List;
 
@@ -16,9 +12,9 @@ import java.util.List;
  * Created by yeti on 16/4/1.
  */
 public class HBaseAdmin {
-	private Admin admin;
+	private org.apache.hadoop.hbase.client.HBaseAdmin admin;
 
-	protected HBaseAdmin(Admin admin) {
+	protected HBaseAdmin(org.apache.hadoop.hbase.client.HBaseAdmin admin) {
 		this.admin = admin;
 	}
 
@@ -43,7 +39,7 @@ public class HBaseAdmin {
 		});
 	}
 
-	private Admin admin() {
+	private org.apache.hadoop.hbase.client.HBaseAdmin admin() {
 		return admin;
 	}
 
@@ -154,12 +150,7 @@ public class HBaseAdmin {
 	}
 
 	public void truncateTable(TableName tableName, boolean preserveSplit) {
-		disableTable(tableName);
-		try {
-			admin().truncateTable(tableName.get(), preserveSplit);
-		} catch (Throwable throwable) {
-			throw new UnHandledException(throwable);
-		}
+		throw new NotSupportException();
 	}
 
 	public void disableTable(TableName tableName) {
@@ -211,7 +202,7 @@ public class HBaseAdmin {
 
 	public void majorCompact(TableName tableName, String family) {
 		try {
-			admin().majorCompact(tableName.get(), family == null ? null : HBaseClient.bytes(family));
+			admin().majorCompact(tableName.get().getName(), family == null ? null : HBaseClient.bytes(family));
 		} catch (Throwable throwable) {
 			throw new UnHandledException(throwable);
 		}
@@ -219,7 +210,7 @@ public class HBaseAdmin {
 
 	public void split(TableName tableName, byte[] splitPoint) {
 		try {
-			admin().split(tableName.get(), splitPoint);
+			admin().split(tableName.get().getName(), splitPoint);
 		} catch (Throwable throwable) {
 			throw new UnHandledException(throwable);
 		}
