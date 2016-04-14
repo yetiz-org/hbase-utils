@@ -206,12 +206,12 @@ public abstract class HTableModel<T extends HTableModel> {
 
 	private static void initModelQualifier() {
 		implementedModels()
-			.map(type -> {
+			.forEach(type -> {
 				TableName tableName = TableName.valueOf(type.getSimpleName());
 				ModelTableNameMaps.put(type, tableName);
 				TableNameModelMaps.put(tableName, type);
-				return type;
-			})
+			});
+		implementedModels()
 			.forEach(type -> {
 				try {
 					TableName tableName = type.newInstance().tableName();
