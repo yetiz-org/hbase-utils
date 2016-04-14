@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.yetiz.utils.hbase.exception.InvalidOperationException;
 import org.yetiz.utils.hbase.exception.TypeNotFoundException;
 
+import javax.xml.bind.DatatypeConverter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -30,9 +31,9 @@ import java.util.stream.Stream;
  */
 public abstract class HTableModel<T extends HTableModel> {
 	protected static final ObjectMapper JSON_MAPPER = new ObjectMapper(new JsonFactory());
-	private static final HashMap<TableName, HashMap<String, Qualifier>>
+	protected static final HashMap<TableName, HashMap<String, Qualifier>>
 		ModelQualifiers = new HashMap<>();
-	private static final HashMap<TableName, HashMap<String, Family>>
+	protected static final HashMap<TableName, HashMap<String, Family>>
 		ModelFamilies = new HashMap<>();
 	private static final HashMap<Class<? extends HTableModel>, TableName>
 		ModelTableNameMaps = new HashMap<>();
@@ -173,10 +174,10 @@ public abstract class HTableModel<T extends HTableModel> {
 		familyMaps.entrySet()
 			.stream()
 			.forEach(entry -> families
-					.add(JSON_MAPPER.createObjectNode()
-						.put("family", entry.getKey())
-						.put("compression", familyComp.get(entry.getKey()))
-						.set("qualifiers", entry.getValue()))
+				.add(JSON_MAPPER.createObjectNode()
+					.put("family", entry.getKey())
+					.put("compression", familyComp.get(entry.getKey()))
+					.set("qualifiers", entry.getValue()))
 			);
 
 		root.set("families", families);
@@ -276,6 +277,14 @@ public abstract class HTableModel<T extends HTableModel> {
 		return delete;
 	}
 
+	public static final byte[] byteValueFromHex(String hex) {
+		return DatatypeConverter.parseHexBinary(hex);
+	}
+
+	public static final String hexValue(byte[] value) {
+		return DatatypeConverter.printHexBinary(value);
+	}
+
 	public boolean isEmpty() {
 		return result == null || result.isEmpty();
 	}
@@ -290,10 +299,6 @@ public abstract class HTableModel<T extends HTableModel> {
 			.stream()
 			.forEach(pack -> put.addColumn(byteValue(pack.family), byteValue(pack.qualifier), pack.value));
 		return put;
-	}
-
-	public static final byte[] byteValue(String string) {
-		return string.getBytes(HBaseClient.DEFAULT_CHARSET);
 	}
 
 	@Family(family = "d")
@@ -345,8 +350,28 @@ public abstract class HTableModel<T extends HTableModel> {
 		return ModelQualifiers.get(tableName()).get(methodName).qualifier();
 	}
 
-	public static final byte[] byteValue(long longValue) {
-		return ByteBuffer.allocate(8).putLong(longValue).array();
+	public static final byte[] byteValue(Object object) {
+		if (object instanceof String) {
+			return ((String) object).getBytes(HBaseClient.DEFAULT_CHARSET);
+		}
+
+		if (object instanceof Long) {
+			return ByteBuffer.allocate(8).putLong((Long) object).array();
+		}
+
+		if (object instanceof Integer) {
+			return ByteBuffer.allocate(4).putInt((Integer) object).array();
+		}
+
+		if (object instanceof Float) {
+			return ByteBuffer.allocate(4).putFloat((Float) object).array();
+		}
+
+		if (object instanceof Double) {
+			return ByteBuffer.allocate(8).putDouble((Double) object).array();
+		}
+
+		return object.toString().getBytes(HBaseClient.DEFAULT_CHARSET);
 	}
 
 	public Delete delete() {
