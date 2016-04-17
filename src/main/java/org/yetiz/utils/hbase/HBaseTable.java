@@ -18,6 +18,7 @@ public class HBaseTable {
 	private final Table table;
 	private final TableName tableName;
 	private final Model model;
+	private boolean closed = false;
 
 	protected HBaseTable(TableName tableName,
 	                     Table table) {
@@ -26,7 +27,7 @@ public class HBaseTable {
 		this.model = new Model();
 	}
 
-	public Model model() {
+	public <R extends HTableModel> Model<R> model() {
 		return model;
 	}
 
@@ -35,6 +36,8 @@ public class HBaseTable {
 			table().close();
 		} catch (Throwable throwable) {
 			throw convertedException(throwable);
+		} finally {
+			closed = true;
 		}
 	}
 
@@ -48,6 +51,10 @@ public class HBaseTable {
 		} else {
 			return new UnHandledException(throwable);
 		}
+	}
+
+	public boolean isClosed() {
+		return closed;
 	}
 
 	public boolean exists(Get get) {
@@ -160,9 +167,9 @@ public class HBaseTable {
 		}
 	}
 
-	public class Model {
+	public class Model<R extends HTableModel> {
 
-		public <R extends HTableModel> R append(Append append) {
+		public R append(Append append) {
 			try {
 				return convert(table().append(append));
 			} catch (Throwable throwable) {
@@ -170,11 +177,11 @@ public class HBaseTable {
 			}
 		}
 
-		private <R extends HTableModel> R convert(Result result) {
+		private R convert(Result result) {
 			return HTableModel.newWrappedModel(tableName, result);
 		}
 
-		public <R extends HTableModel> R increment(Increment increment) {
+		public R increment(Increment increment) {
 			try {
 				return convert(table().increment(increment));
 			} catch (Throwable throwable) {
@@ -182,7 +189,7 @@ public class HBaseTable {
 			}
 		}
 
-		public <R extends HTableModel> R get(Get get) {
+		public R get(Get get) {
 			try {
 				return convert(table().get(get));
 			} catch (Throwable throwable) {
@@ -190,7 +197,7 @@ public class HBaseTable {
 			}
 		}
 
-		public <R extends HTableModel> List<R> get(List<Get> gets) {
+		public List<R> get(List<Get> gets) {
 			try {
 				return Arrays.asList(table().get(gets))
 					.stream()
@@ -203,7 +210,7 @@ public class HBaseTable {
 			}
 		}
 
-		public ReturnScanner scan(Scan scan) {
+		public ReturnScanner<R> scan(Scan scan) {
 			try {
 				return new ReturnScanner(table().getScanner(scan));
 			} catch (Throwable throwable) {
@@ -211,22 +218,22 @@ public class HBaseTable {
 			}
 		}
 
-		public class ReturnScanner {
+		public class ReturnScanner<R extends HTableModel> {
 			private ResultScanner scanner;
 
 			public ReturnScanner(ResultScanner scanner) {
 				this.scanner = scanner;
 			}
 
-			public <R extends HTableModel> R next() throws IOException {
+			public R next() throws IOException {
 				return convert(scanner.next());
 			}
 
-			private <R extends HTableModel> R convert(Result result) {
+			private R convert(Result result) {
 				return HTableModel.newWrappedModel(tableName, result);
 			}
 
-			public <R extends HTableModel> List<R> next(int nbRows) throws IOException {
+			public List<R> next(int nbRows) throws IOException {
 				return Arrays.asList(scanner.next(nbRows))
 					.stream()
 					.collect(ArrayList::new,
@@ -238,8 +245,8 @@ public class HBaseTable {
 				scanner.close();
 			}
 
-			public <R extends HTableModel> void forEach(Consumer<? super R> action) {
-				scanner.forEach(result -> action.accept(this.<R>convert(result)));
+			public void forEach(Consumer<? super R> action) {
+				scanner.forEach(result -> action.accept(this.convert(result)));
 			}
 		}
 	}

@@ -1,6 +1,9 @@
 package org.yetiz.utils.hbase;
 
 import org.apache.hadoop.hbase.client.*;
+import org.yetiz.utils.hbase.utils.CallbackTask;
+import org.yetiz.utils.hbase.utils.ResultTask;
+import org.yetiz.utils.hbase.utils.Task;
 
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -39,17 +42,6 @@ public class HAsyncTable {
 	public void batch(List<Row> rows, ResultTask task) {
 		rows.parallelStream()
 			.forEach(row -> asyncQueue.offer(new AsyncPackage(row, task)));
-	}
-
-	public interface Task {
-	}
-
-	public interface ResultTask extends Task {
-		void callback(Result result);
-	}
-
-	public interface CallbackTask extends Task {
-		void callback();
 	}
 
 	public class AsyncPackage {

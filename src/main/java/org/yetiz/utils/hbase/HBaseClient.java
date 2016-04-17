@@ -7,12 +7,12 @@ import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.client.coprocessor.AggregationClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.yetiz.utils.hbase.HAsyncTable.CallbackTask;
-import org.yetiz.utils.hbase.HAsyncTable.ResultTask;
-import org.yetiz.utils.hbase.HAsyncTable.Task;
 import org.yetiz.utils.hbase.exception.DataSourceException;
 import org.yetiz.utils.hbase.exception.UnHandledException;
 import org.yetiz.utils.hbase.exception.YHBaseException;
+import org.yetiz.utils.hbase.utils.CallbackTask;
+import org.yetiz.utils.hbase.utils.ResultTask;
+import org.yetiz.utils.hbase.utils.Task;
 
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -268,6 +268,10 @@ public final class HBaseClient {
 		}
 
 		return asyncCollection.get(tableName);
+	}
+
+	public HBaseTable table(HTableModel model) {
+		return table(model.tableName());
 	}
 
 	public HBaseTable table(TableName tableName) {

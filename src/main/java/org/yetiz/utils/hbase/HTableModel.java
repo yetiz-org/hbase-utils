@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.collections.map.UnmodifiableMap;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
@@ -15,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yetiz.utils.hbase.exception.InvalidOperationException;
 import org.yetiz.utils.hbase.exception.TypeNotFoundException;
+import org.yetiz.utils.hbase.utils.ModelCallbackTask;
 
 import javax.xml.bind.DatatypeConverter;
 import java.lang.reflect.Field;
@@ -303,8 +305,16 @@ public abstract class HTableModel<T extends HTableModel> {
 		return DatatypeConverter.printHexBinary(value);
 	}
 
-	public boolean isEmpty() {
-		return result == null || result.isEmpty();
+	public T put(HBaseClient client) {
+		if (!isResult) {
+			throw new InvalidOperationException("this is not result instance.");
+		}
+
+		Put put = put(result.getRow());
+		HBaseTable table = client.table(tableName());
+		table.put(put);
+		table.close();
+		return (T) this;
 	}
 
 	public Put put(byte[] row) {
@@ -348,11 +358,13 @@ public abstract class HTableModel<T extends HTableModel> {
 		result.listCells()
 			.stream()
 			.forEach(cell -> {
-				String family = stringValue(cell.getFamilyArray());
-				String qualifier = stringValue(cell.getQualifierArray());
+				String family = stringValue(CellUtil.cloneFamily(cell));
+				String qualifier = stringValue(CellUtil.cloneQualifier(cell));
 				String methodName = ModelFQFields.get(tableName())
 					.get(family + "+-" + qualifier);
-				setValues.put(methodName, new ValueSetterPackage(family, qualifier, cell.getValueArray()));
+				if (methodName != null) {
+					setValues.put(methodName, new ValueSetterPackage(family, qualifier, CellUtil.cloneValue(cell)));
+				}
 			});
 	}
 
@@ -396,13 +408,51 @@ public abstract class HTableModel<T extends HTableModel> {
 		return object.toString().getBytes(HBaseClient.DEFAULT_CHARSET);
 	}
 
+	/**
+	 * When this instance is Operation result and the result is Empty, then do
+	 *
+	 * @param task callback task
+	 * @return
+	 */
+	public T orThen(ModelCallbackTask<T> task) {
+		if (isEmpty() && isResult) {
+			task.callback((T) this);
+		}
+		return (T) this;
+	}
+
+	public boolean isEmpty() {
+		return result == null || result.isEmpty();
+	}
+
+	/**
+	 * do after previous operation
+	 *
+	 * @param task
+	 * @return
+	 */
+	public T then(ModelCallbackTask<T> task) {
+		task.callback((T) this);
+		return (T) this;
+	}
+
+	public T delete(HBaseClient client) {
+		if (!isResult) {
+			throw new InvalidOperationException("this is not result instance.");
+		}
+
+		HBaseTable table = client.table(tableName());
+		table.delete(new Delete(result.getRow()));
+		table.close();
+		return (T) this;
+	}
+
 	public Delete delete() {
 		if (!isResult) {
 			throw new InvalidOperationException("this is not result instance.");
 		}
 
-		Delete delete = new Delete(result.getRow());
-		return delete;
+		return new Delete(result.getRow());
 	}
 
 	public final byte[] row() {
