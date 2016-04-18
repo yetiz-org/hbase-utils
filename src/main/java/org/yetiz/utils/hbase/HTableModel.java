@@ -202,7 +202,7 @@ public abstract class HTableModel<T extends HTableModel> {
 
 		root.set("families", families);
 		descriptor = client.admin().tableDescriptor(tableName());
-		descriptor.setValue("description", root.toString());
+		descriptor.setValue("description".getBytes(), root.toString().getBytes());
 		client.admin().updateTable(tableName(), descriptor);
 	}
 
