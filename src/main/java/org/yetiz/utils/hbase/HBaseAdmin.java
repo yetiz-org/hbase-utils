@@ -27,14 +27,17 @@ public class HBaseAdmin {
 		}
 	}
 
-	private void checkTableNotExist(TableName tableName) {
-		CATCHER(() -> {
-			try {
-				if (admin().tableExists(tableName.get())) {
-					throw new DuplicateException("table name existed");
+	private void checkTableNotExist(final TableName tableName) {
+		CATCHER(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					if (HBaseAdmin.this.admin().tableExists(tableName.get())) {
+						throw new DuplicateException("table name existed");
+					}
+				} catch (Throwable throwable) {
+					throw new UnHandledException(throwable);
 				}
-			} catch (Throwable throwable) {
-				throw new UnHandledException(throwable);
 			}
 		});
 	}

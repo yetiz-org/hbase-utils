@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
  * Created by yeti on 16/4/5.
@@ -204,12 +203,13 @@ public class HBaseTable {
 
 		public List<R> get(List<Get> gets) {
 			try {
-				return Arrays.asList(table().get(gets))
-					.stream()
-					.collect(ArrayList::new,
-						(list, get) -> list.add(convert(get)),
-						(list1, list2) -> list1.addAll(list2));
+				ArrayList<R> rs = new ArrayList<>();
 
+				for (Result result : Arrays.asList(table().get(gets))) {
+					rs.add(convert(result));
+				}
+
+				return rs;
 			} catch (Throwable throwable) {
 				throw convertedException(throwable);
 			}
@@ -239,19 +239,16 @@ public class HBaseTable {
 			}
 
 			public List<R> next(int nbRows) throws IOException {
-				return Arrays.asList(scanner.next(nbRows))
-					.stream()
-					.collect(ArrayList::new,
-						(list, get) -> list.add(convert(get)),
-						(list1, list2) -> list1.addAll(list2));
+				List<R> rs = new ArrayList<>();
+				for (Result result : Arrays.asList(scanner.next(nbRows))) {
+					rs.add(convert(result));
+				}
+
+				return rs;
 			}
 
 			public void close() {
 				scanner.close();
-			}
-
-			public void forEach(Consumer<? super R> action) {
-				scanner.forEach(result -> action.accept(this.convert(result)));
 			}
 		}
 	}

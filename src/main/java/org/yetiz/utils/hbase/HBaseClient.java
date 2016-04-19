@@ -19,6 +19,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -30,7 +31,9 @@ public final class HBaseClient {
 	private static final int DEFAULT_MAX_FAST_BATCH_COUNT = 5000;
 	private static final int DEFAULT_MAX_ASYNC_BATCH_COUNT = 5000;
 	private static final ExecutorService EXECUTOR =
-		new ThreadPoolExecutor(0, Integer.MAX_VALUE, 5L, TimeUnit.SECONDS, new SynchronousQueue<>());
+		new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+			5L, TimeUnit.SECONDS,
+			new SynchronousQueue<Runnable>());
 	private static final AtomicLong INCREMENT_ID = new AtomicLong(0);
 	protected final HashMap<TableName, LinkedBlockingQueue<Row>>
 		fastCollection = new HashMap<>();
@@ -104,6 +107,10 @@ public final class HBaseClient {
 		}
 	}
 
+	public Configuration configuration() {
+		return configuration;
+	}
+
 	public org.yetiz.utils.hbase.HBaseAdmin admin() {
 		try {
 			return new org.yetiz.utils.hbase.HBaseAdmin(new HBaseAdmin(configuration()));
@@ -131,7 +138,7 @@ public final class HBaseClient {
 		return this.closed;
 	}
 
-	private void fastLoopTask(TableName tableName, LinkedBlockingQueue<Row> fastQueue, boolean isMaster) {
+	private void fastLoopTask(final TableName tableName, final LinkedBlockingQueue<Row> fastQueue, boolean isMaster) {
 		List<Row> rows = new ArrayList<>();
 
 		while (!closed()) {
@@ -147,7 +154,12 @@ public final class HBaseClient {
 
 				rows.add(row);
 				if (fastQueue.drainTo(rows, fastBatchCount()) == fastBatchCount() && reproducible) {
-					EXECUTOR.execute(() -> fastLoopTask(tableName, fastQueue, false));
+					EXECUTOR.execute(new Runnable() {
+						@Override
+						public void run() {
+							HBaseClient.this.fastLoopTask(tableName, fastQueue, false);
+						}
+					});
 				}
 
 				Object[] results = new Object[rows.size()];
@@ -172,13 +184,18 @@ public final class HBaseClient {
 		}
 	}
 
-	protected LinkedBlockingQueue<Row> fastQueue(TableName tableName) {
+	protected LinkedBlockingQueue<Row> fastQueue(final TableName tableName) {
 		if (!fastCollection.containsKey(tableName)) {
 			synchronized (fastCollection) {
 				if (!fastCollection.containsKey(tableName)) {
-					LinkedBlockingQueue<Row> fastQueue = new LinkedBlockingQueue<>();
+					final LinkedBlockingQueue<Row> fastQueue = new LinkedBlockingQueue<>();
 					fastCollection.put(tableName, fastQueue);
-					EXECUTOR.execute(() -> fastLoopTask(tableName, fastQueue, true));
+					EXECUTOR.execute(new Runnable() {
+						@Override
+						public void run() {
+							HBaseClient.this.fastLoopTask(tableName, fastQueue, true);
+						}
+					});
 				}
 			}
 		}
@@ -186,8 +203,8 @@ public final class HBaseClient {
 		return fastCollection.get(tableName);
 	}
 
-	private void asyncLoopTask(TableName tableName,
-	                           LinkedBlockingQueue<HAsyncTable.AsyncPackage> asyncQueue,
+	private void asyncLoopTask(final TableName tableName,
+	                           final LinkedBlockingQueue<HAsyncTable.AsyncPackage> asyncQueue,
 	                           boolean isMaster) {
 		List<HAsyncTable.AsyncPackage> packages = new ArrayList<>();
 
@@ -204,12 +221,20 @@ public final class HBaseClient {
 
 				packages.add(aPackage);
 				if (asyncQueue.drainTo(packages, asyncBatchCount()) == asyncBatchCount() && reproducible) {
-					EXECUTOR.execute(() -> asyncLoopTask(tableName, asyncQueue, false));
+					EXECUTOR.execute(new Runnable() {
+						@Override
+						public void run() {
+							HBaseClient.this.asyncLoopTask(tableName, asyncQueue, false);
+						}
+					});
 				}
 
 				List<Row> rows = new ArrayList<>();
-				packages.stream()
-					.forEach(asyncPackage -> rows.add(asyncPackage.action));
+
+				for (HAsyncTable.AsyncPackage asyncPackage : packages) {
+					rows.add(asyncPackage.action);
+
+				}
 
 				Object[] results = new Object[packages.size()];
 				HAsyncTable.AsyncPackage[] packageArray = new HAsyncTable.AsyncPackage[packages.size()];
@@ -232,22 +257,25 @@ public final class HBaseClient {
 					invokes.put(packageArray[i], results[i]);
 				}
 
-				invokes.entrySet()
-					.parallelStream()
-					.forEach(entry -> {
-						Task task = entry.getKey().callback;
-						if (task == null) {
-							return;
-						}
+				for (final Map.Entry<HAsyncTable.AsyncPackage, Object> entry : invokes.entrySet()) {
+					EXECUTOR.execute(new Runnable() {
+						@Override
+						public void run() {
+							Task task = entry.getKey().callback;
+							if (task == null) {
+								return;
+							}
 
-						if (task instanceof ResultTask) {
-							((ResultTask) task).callback(((Result) entry.getValue()));
-						}
+							if (task instanceof ResultTask) {
+								((ResultTask) task).callback(((Result) entry.getValue()));
+							}
 
-						if (task instanceof CallbackTask) {
-							((CallbackTask) task).callback();
+							if (task instanceof CallbackTask) {
+								((CallbackTask) task).callback();
+							}
 						}
 					});
+				}
 			} catch (Throwable throwable) {
 			}
 
@@ -257,13 +285,18 @@ public final class HBaseClient {
 		}
 	}
 
-	protected LinkedBlockingQueue<HAsyncTable.AsyncPackage> asyncQueue(TableName tableName) {
+	protected LinkedBlockingQueue<HAsyncTable.AsyncPackage> asyncQueue(final TableName tableName) {
 		if (!asyncCollection.containsKey(tableName)) {
 			synchronized (asyncCollection) {
 				if (!asyncCollection.containsKey(tableName)) {
-					LinkedBlockingQueue<HAsyncTable.AsyncPackage> asyncQueue = new LinkedBlockingQueue<>();
+					final LinkedBlockingQueue<HAsyncTable.AsyncPackage> asyncQueue = new LinkedBlockingQueue<>();
 					asyncCollection.put(tableName, asyncQueue);
-					EXECUTOR.execute(() -> asyncLoopTask(tableName, asyncQueue, true));
+					EXECUTOR.execute(new Runnable() {
+						@Override
+						public void run() {
+							HBaseClient.this.asyncLoopTask(tableName, asyncQueue, true);
+						}
+					});
 				}
 			}
 		}
@@ -306,10 +339,6 @@ public final class HBaseClient {
 		} catch (Throwable e) {
 		}
 		return count;
-	}
-
-	public Configuration configuration() {
-		return configuration;
 	}
 
 	public static class Parameter {

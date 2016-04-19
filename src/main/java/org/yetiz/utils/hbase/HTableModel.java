@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.collections.map.UnmodifiableMap;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
@@ -24,7 +25,6 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.stream.Stream;
 
 /**
  * Created by yeti on 16/4/1.
@@ -106,21 +106,25 @@ public abstract class HTableModel<T extends HTableModel> {
 	}
 
 	public static final void DBDrop(HBaseClient client) {
-		implementedModels()
-			.parallel()
-			.forEach(type -> {
-				try {
-					type.newInstance().drop(client);
-				} catch (Throwable throwable) {
-				}
-			});
+		for (Class<? extends HTableModel> type : implementedModels()) {
+			try {
+				type.newInstance().drop(client);
+			} catch (Throwable throwable) {
+			}
+		}
 	}
 
-	private static final Stream<Class<? extends HTableModel>> implementedModels() {
-		return REFLECTION
-			.getSubTypesOf(HTableModel.class)
-			.stream()
-			.filter(type -> !Modifier.isAbstract(type.getModifiers()));
+	private static final List<Class<? extends HTableModel>> implementedModels() {
+		Set<Class<? extends HTableModel>> reflects = REFLECTION.getSubTypesOf(HTableModel.class);
+		List<Class<? extends HTableModel>> abstracts = new ArrayList<>();
+		for (Class<? extends HTableModel> type : reflects) {
+			if (Modifier.isAbstract(type.getModifiers())) {
+				abstracts.add(type);
+			}
+		}
+
+		reflects.removeAll(abstracts);
+		return new ArrayList<>(reflects);
 	}
 
 	public void drop(HBaseClient client) {
@@ -133,14 +137,12 @@ public abstract class HTableModel<T extends HTableModel> {
 
 	public static final void DBMigration(HBaseClient client) {
 		LOGGER.info("Start migration.");
-		implementedModels()
-			.parallel()
-			.forEach(type -> {
-				try {
-					type.newInstance().migrate(client);
-				} catch (Throwable throwable) {
-				}
-			});
+		for (Class<? extends HTableModel> type : implementedModels()) {
+			try {
+				type.newInstance().migrate(client);
+			} catch (Throwable throwable) {
+			}
+		}
 		LOGGER.info("Migration done.");
 	}
 
@@ -159,46 +161,45 @@ public abstract class HTableModel<T extends HTableModel> {
 		HTableDescriptor finalDescriptor = descriptor;
 		HashMap<String, ArrayNode> familyMaps = new HashMap<>();
 		HashMap<String, String> familyComp = new HashMap<>();
-		ModelFamilies.get(tableName()).entrySet()
-			.stream()
-			.map(entry -> {
-				familyMaps.put(entry.getValue().family(),
-					familyMaps.getOrDefault(entry.getValue().family(), JSON_MAPPER.createArrayNode())
-						.add(JSON_MAPPER.createObjectNode()
-							.put("field_name", entry.getKey())
-							.put("qualifier", ModelQualifiers.get(tableName()).get(entry.getKey()).qualifier())
-							.put("description", ModelQualifiers.get(tableName()).get(entry.getKey()).description()))
-				);
-				familyComp.put(entry.getValue().family(), entry.getValue().compression().getName());
-				return entry;
-			})
-			.collect(HashMap::new,
-				(map, entry) -> {
-					if (!map.containsKey(entry.getValue().family())) {
-						map.put(entry.getValue().family(), entry.getValue());
-					}
-				},
-				(map1, map2) -> map1.putAll(map2))
-			.entrySet()
-			.stream()
-			.forEach(entry -> {
-				if (!finalDescriptor.hasFamily(HBaseClient.bytes((String) entry.getKey()))) {
-					client
-						.admin()
-						.addColumnFamily(tableName(),
-							((Family) entry.getValue()).family(),
-							((Family) entry.getValue()).compression());
-				}
-			});
 
-		familyMaps.entrySet()
-			.stream()
-			.forEach(entry -> families
-					.add(JSON_MAPPER.createObjectNode()
-						.put("family", entry.getKey())
-						.put("compression", familyComp.get(entry.getKey()))
-						.set("qualifiers", entry.getValue()))
-			);
+		for (Map.Entry<String, Family> entry : ModelFamilies.get(tableName()).entrySet()) {
+			ArrayNode nodes = familyMaps.get(entry.getValue().family());
+			if (nodes == null) {
+				nodes = JSON_MAPPER.createArrayNode();
+			}
+
+			familyMaps.put(entry.getValue().family(), nodes.add(JSON_MAPPER.createObjectNode()
+				.put("field_name", entry.getKey())
+				.put("qualifier", ModelQualifiers.get(tableName()).get(entry.getKey()).qualifier())
+				.put("description", ModelQualifiers.get(tableName()).get(entry.getKey()).description())));
+			familyComp.put(entry.getValue().family(), entry.getValue().compression().getName());
+		}
+
+		HashMap<String, Family> collect = new HashMap<>();
+
+		for (Map.Entry<String, Family> entry : ModelFamilies.get(tableName()).entrySet()) {
+			if (!collect.containsKey(entry.getValue().family())) {
+				collect.put(entry.getValue().family(), entry.getValue());
+			}
+		}
+
+		for (Map.Entry<String, Family> entry : collect.entrySet()) {
+			if (!finalDescriptor.hasFamily(HBaseClient.bytes(entry.getKey()))) {
+				client
+					.admin()
+					.addColumnFamily(tableName(),
+						entry.getValue().family(),
+						entry.getValue().compression());
+			}
+		}
+
+		for (Map.Entry<String, ArrayNode> entry : familyMaps.entrySet()) {
+			families
+				.add(JSON_MAPPER.createObjectNode()
+					.put("family", entry.getKey())
+					.put("compression", familyComp.get(entry.getKey()))
+					.set("qualifiers", entry.getValue()));
+		}
 
 		root.set("families", families);
 		descriptor = client.admin().tableDescriptor(tableName());
@@ -207,56 +208,56 @@ public abstract class HTableModel<T extends HTableModel> {
 	}
 
 	private static void initModelQualifier() {
-		implementedModels()
-			.forEach(type -> {
+		for (Class<? extends HTableModel> type : implementedModels()) {
+			try {
 				TableName tableName = TableName.valueOf(type.getSimpleName());
 				ModelTableNameMaps.put(type, tableName);
 				TableNameModelMaps.put(tableName, type);
-			});
-		implementedModels()
-			.forEach(type -> {
+			} catch (Throwable throwable) {
+			}
+		}
+
+		for (Class<? extends HTableModel> type : implementedModels()) {
+			try {
 				try {
 					TableName tableName = type.newInstance().tableName();
 					List<Method> methods = methods(type, null);
-					ModelFQFields.put(tableName,
-						methods
-							.stream()
-							.collect(HashMap<String, String>::new,
-								(map, method) -> {
-									if (method.getAnnotation(Family.class) != null &&
-										method.getAnnotation(Qualifier.class) != null) {
-										map.put(method.getAnnotation(Family.class).family() +
-												"+-" +
-												method.getAnnotation(Qualifier.class).qualifier(),
-											method.getName());
-									}
-								},
-								(map1, map2) -> map1.putAll(map2)));
 
-					ModelQualifiers.put(tableName,
-						methods
-							.stream()
-							.collect(HashMap<String, Qualifier>::new,
-								(map, method) -> {
-									if (method.getAnnotation(Qualifier.class) != null) {
-										map.put(method.getName(), method.getAnnotation(Qualifier.class));
-									}
-								},
-								(map1, map2) -> map1.putAll(map2)));
+					HashMap<String, String> fqFields = new HashMap<>();
+					for (Method method : methods) {
+						if (method.getAnnotation(Family.class) != null &&
+							method.getAnnotation(Qualifier.class) != null) {
+							fqFields.put(method.getAnnotation(Family.class).family() +
+									"+-" +
+									method.getAnnotation(Qualifier.class).qualifier(),
+								method.getName());
+						}
+					}
 
-					ModelFamilies.put(tableName,
-						methods
-							.stream()
-							.collect(HashMap<String, Family>::new,
-								(map, method) -> {
-									if (method.getAnnotation(Family.class) != null) {
-										map.put(method.getName(), method.getAnnotation(Family.class));
-									}
-								},
-								(map1, map2) -> map1.putAll(map2)));
+					ModelFQFields.put(tableName, fqFields);
+
+					HashMap<String, Qualifier> mqs = new HashMap<>();
+					for (Method method : methods) {
+						if (method.getAnnotation(Qualifier.class) != null) {
+							mqs.put(method.getName(), method.getAnnotation(Qualifier.class));
+						}
+					}
+
+					ModelQualifiers.put(tableName, mqs);
+
+					HashMap<String, Family> mfs = new HashMap<>();
+					for (Method method : methods) {
+						if (method.getAnnotation(Family.class) != null) {
+							mfs.put(method.getName(), method.getAnnotation(Family.class));
+						}
+					}
+
+					ModelFamilies.put(tableName, mfs);
 				} catch (Throwable throwable) {
 				}
-			});
+			} catch (Throwable throwable) {
+			}
+		}
 	}
 
 	private static final List<Field> fields(Class type, List<Field> fields) {
@@ -323,9 +324,10 @@ public abstract class HTableModel<T extends HTableModel> {
 			row_updated_time(System.currentTimeMillis());
 		}
 
-		setValues.values()
-			.stream()
-			.forEach(pack -> put.add(byteValue(pack.family), byteValue(pack.qualifier), pack.value));
+		for (ValueSetterPackage pack : setValues.values()) {
+			put.add(byteValue(pack.family), byteValue(pack.qualifier), pack.value);
+		}
+
 		return put;
 	}
 
@@ -355,17 +357,15 @@ public abstract class HTableModel<T extends HTableModel> {
 			return;
 		}
 
-		result.listCells()
-			.stream()
-			.forEach(cell -> {
-				String family = stringValue(CellUtil.cloneFamily(cell));
-				String qualifier = stringValue(CellUtil.cloneQualifier(cell));
-				String methodName = ModelFQFields.get(tableName())
-					.get(family + "+-" + qualifier);
-				if (methodName != null) {
-					setValues.put(methodName, new ValueSetterPackage(family, qualifier, CellUtil.cloneValue(cell)));
-				}
-			});
+		for (Cell cell : result.listCells()) {
+			String family = stringValue(CellUtil.cloneFamily(cell));
+			String qualifier = stringValue(CellUtil.cloneQualifier(cell));
+			String methodName = ModelFQFields.get(tableName())
+				.get(family + "+-" + qualifier);
+			if (methodName != null) {
+				setValues.put(methodName, new ValueSetterPackage(family, qualifier, CellUtil.cloneValue(cell)));
+			}
+		}
 	}
 
 	public static final String stringValue(byte[] bytes) {
@@ -482,7 +482,12 @@ public abstract class HTableModel<T extends HTableModel> {
 			return result.getValue(HBaseClient.bytes(family(methodName)), HBaseClient.bytes(qualifier(methodName)));
 		}
 
-		return setValues.getOrDefault(methodName, DEFAULT_VALUE_SETTER_PACKAGE).value;
+		ValueSetterPackage valueSetterPackage = setValues.get(methodName);
+		if (valueSetterPackage == null) {
+			valueSetterPackage = DEFAULT_VALUE_SETTER_PACKAGE;
+		}
+
+		return valueSetterPackage.value;
 	}
 
 	private static class ValueSetterPackage {

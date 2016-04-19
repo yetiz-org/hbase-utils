@@ -1,5 +1,5 @@
 group 'org.yetiz.utils'
-version '2.0.98.6.0'
+version '2.0.98.6.1'
 
 apply plugin: 'java'
 apply plugin: 'idea'
@@ -8,8 +8,8 @@ apply plugin: 'signing'
 
 archivesBaseName = "hbase-utils"
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
 
 repositories {
     mavenCentral()
@@ -28,6 +28,7 @@ dependencies {
 
     // CDH HBase
 //    compile 'org.apache.hbase:hbase-client:1.0.0-cdh5.5.1'
+//    compile 'org.apache.hbase:hbase-client:0.98.6-cdh5.3.0'
     // Apache
 //    compile 'org.apache.hbase:hbase-client:1.0.0'
     compile 'org.apache.hbase:hbase-client:0.98.6.1-hadoop2'

@@ -40,8 +40,9 @@ public class HAsyncTable {
 	}
 
 	public void batch(List<Row> rows, ResultTask task) {
-		rows.parallelStream()
-			.forEach(row -> asyncQueue.offer(new AsyncPackage(row, task)));
+		for (Row row : rows) {
+			asyncQueue.offer(new AsyncPackage(row, task));
+		}
 	}
 
 	public class AsyncPackage {
