@@ -14,12 +14,12 @@ Maven
     <dependency>
         <groupId>org.yetiz.utils</groupId>
         <artifactId>hbase-utils</artifactId>
-        <version>2.1.0.0.0</version>
+        <version>2.1.0.0.1</version>
     </dependency>
 
 Gradle
 
-    compile 'org.yetiz.utils:hbase-utils:2.1.0.0.0'
+    compile 'org.yetiz.utils:hbase-utils:2.1.0.0.1'
 
 ## CDH Version
 
@@ -28,12 +28,12 @@ Maven
     <dependency>
         <groupId>org.yetiz.utils</groupId>
         <artifactId>hbase-utils</artifactId>
-        <version>2.1.0.0.0-cdh5.5.1</version>
+        <version>2.1.0.0.1-cdh5.5.1</version>
     </dependency>
 
 Gradle
 
-    compile 'org.yetiz.utils:hbase-utils:2.1.0.0.0-cdh5.5.1'
+    compile 'org.yetiz.utils:hbase-utils:2.1.0.0.1-cdh5.5.1'
 
 
 
