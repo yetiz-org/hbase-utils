@@ -24,7 +24,7 @@ public class HBaseTable {
 	                     Table table) {
 		this.tableName = tableName;
 		this.table = table;
-		this.model = new Model();
+		this.model = new Model(table, tableName);
 	}
 
 	public <R extends HTableModel> Model<R> model() {
@@ -167,13 +167,28 @@ public class HBaseTable {
 		}
 	}
 
-	public class Model<R extends HTableModel> {
+	public static class Model<R extends HTableModel> {
+		private Table table;
+		private TableName tableName;
+
+		public Model(Table table, TableName tableName) {
+			this.table = table;
+			this.tableName = tableName;
+		}
 
 		public R append(Append append) {
 			try {
-				return convert(table().append(append));
+				return convert(table.append(append));
 			} catch (Throwable throwable) {
 				throw convertedException(throwable);
+			}
+		}
+
+		private YHBaseException convertedException(Throwable throwable) {
+			if (throwable instanceof YHBaseException) {
+				return (YHBaseException) throwable;
+			} else {
+				return new UnHandledException(throwable);
 			}
 		}
 
@@ -183,7 +198,7 @@ public class HBaseTable {
 
 		public R increment(Increment increment) {
 			try {
-				return convert(table().increment(increment));
+				return convert(table.increment(increment));
 			} catch (Throwable throwable) {
 				throw convertedException(throwable);
 			}
@@ -191,7 +206,7 @@ public class HBaseTable {
 
 		public R get(Get get) {
 			try {
-				return convert(table().get(get));
+				return convert(table.get(get));
 			} catch (Throwable throwable) {
 				throw convertedException(throwable);
 			}
@@ -199,7 +214,7 @@ public class HBaseTable {
 
 		public List<R> get(List<Get> gets) {
 			try {
-				return Arrays.asList(table().get(gets))
+				return Arrays.asList(table.get(gets))
 					.stream()
 					.collect(ArrayList::new,
 						(list, get) -> list.add(convert(get)),
@@ -212,17 +227,19 @@ public class HBaseTable {
 
 		public ReturnScanner<R> scan(Scan scan) {
 			try {
-				return new ReturnScanner(table().getScanner(scan));
+				return new ReturnScanner<>(table.getScanner(scan), tableName);
 			} catch (Throwable throwable) {
 				throw convertedException(throwable);
 			}
 		}
 
-		public class ReturnScanner<R extends HTableModel> {
+		public static class ReturnScanner<R extends HTableModel> {
 			private ResultScanner scanner;
+			private TableName tableName;
 
-			public ReturnScanner(ResultScanner scanner) {
+			public ReturnScanner(ResultScanner scanner, TableName tableName) {
 				this.scanner = scanner;
+				this.tableName = tableName;
 			}
 
 			public R next() throws IOException {
