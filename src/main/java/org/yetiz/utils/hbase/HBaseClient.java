@@ -72,6 +72,10 @@ public final class HBaseClient {
 		return new HFastTable(fastQueue(tableName));
 	}
 
+	public HFastTable fast(HTableModel model) {
+		return new HFastTable(fastQueue(model.tableName()));
+	}
+
 	public int fastBatchCount() {
 		return fastBatchCount;
 	}

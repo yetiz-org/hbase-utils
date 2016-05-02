@@ -369,7 +369,7 @@ public abstract class HTableModel<T extends HTableModel> {
 	}
 
 	public static final String stringValue(byte[] bytes) {
-		return new String(bytes, HBaseClient.DEFAULT_CHARSET);
+		return bytes == null ? null : new String(bytes, HBaseClient.DEFAULT_CHARSET);
 	}
 
 	private final String family(String methodName) {
@@ -486,7 +486,7 @@ public abstract class HTableModel<T extends HTableModel> {
 	}
 
 	public static final Long longValue(byte[] bytes) {
-		return ByteBuffer.wrap(bytes).getLong();
+		return bytes == null ? null : ByteBuffer.wrap(bytes).getLong();
 	}
 
 	protected final byte[] retrieveValue() {
