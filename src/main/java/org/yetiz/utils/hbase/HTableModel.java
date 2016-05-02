@@ -405,6 +405,10 @@ public abstract class HTableModel<T extends HTableModel> {
 			return ByteBuffer.allocate(8).putDouble((Double) object).array();
 		}
 
+		if (object == null){
+			return null;
+		}
+
 		return object.toString().getBytes(HBaseClient.DEFAULT_CHARSET);
 	}
 
