@@ -405,7 +405,7 @@ public abstract class HTableModel<T extends HTableModel> {
 			return ByteBuffer.allocate(8).putDouble((Double) object).array();
 		}
 
-		if (object == null){
+		if (object == null) {
 			return null;
 		}
 
@@ -469,6 +469,15 @@ public abstract class HTableModel<T extends HTableModel> {
 		String methodName = Thread.currentThread().getStackTrace()[2].getMethodName();
 		this.setValues.put(methodName,
 			new ValueSetterPackage(family(methodName), qualifier(methodName), byteValue(string)));
+		return (T) this;
+	}
+
+	protected final T setValue(byte[] bytes) {
+		copyResultToSetter();
+
+		String methodName = Thread.currentThread().getStackTrace()[2].getMethodName();
+		this.setValues.put(methodName,
+			new ValueSetterPackage(family(methodName), qualifier(methodName), bytes));
 		return (T) this;
 	}
 
