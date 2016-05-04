@@ -72,6 +72,10 @@ public final class HBaseClient {
 		return new HFastTable(fastQueue(tableName));
 	}
 
+	public HFastTable fast(Class<? extends HTableModel> model) {
+		return new HFastTable(fastQueue(HTableModel.tableName(model)));
+	}
+
 	public HFastTable fast(HTableModel model) {
 		return new HFastTable(fastQueue(model.tableName()));
 	}
@@ -297,6 +301,10 @@ public final class HBaseClient {
 		} else {
 			return new UnHandledException(throwable);
 		}
+	}
+
+	public HBaseTable table(Class<? extends HTableModel> modelClass) {
+		return table(HTableModel.tableName(modelClass));
 	}
 
 	public long rowCount(TableName tableName, byte[] family) {
