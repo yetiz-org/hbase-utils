@@ -62,6 +62,10 @@ public final class HBaseClient {
 		return new HAsyncTable(asyncQueue(tableName));
 	}
 
+	public HAsyncTable async(Class<? extends HTableModel> model) {
+		return new HAsyncTable(asyncQueue(HTableModel.tableName(model)));
+	}
+
 	/**
 	 * Only for Get, Put, Delete, Append, Increment.<br>
 	 * No callback, this is faster then <code>async()</code>
