@@ -174,6 +174,7 @@ public final class HBaseClient {
 					}
 				}
 			} catch (Throwable throwable) {
+				logger.error(throwable.toString());
 			}
 
 			if (!isMaster) {
