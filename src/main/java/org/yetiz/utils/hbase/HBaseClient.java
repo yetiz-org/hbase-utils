@@ -102,6 +102,20 @@ public final class HBaseClient {
 		return this;
 	}
 
+	public HashMap<String, Integer> fastQueueCounts() {
+		HashMap<String, Integer> rtn = new HashMap<>();
+		fastCollection.entrySet()
+			.forEach(entry -> rtn.put(entry.getKey().toString(), entry.getValue().size()));
+		return rtn;
+	}
+
+	public HashMap<String, Integer> asyncQueueCounts() {
+		HashMap<String, Integer> rtn = new HashMap<>();
+		asyncCollection.entrySet()
+			.forEach(entry -> rtn.put(entry.getKey().toString(), entry.getValue().size()));
+		return rtn;
+	}
+
 	private void init() {
 		this.connection = newConnection();
 	}
