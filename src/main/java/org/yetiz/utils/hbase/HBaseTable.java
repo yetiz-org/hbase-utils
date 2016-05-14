@@ -176,6 +176,10 @@ public class HBaseTable {
 			this.tableName = tableName;
 		}
 
+		public void close() throws IOException {
+			table.close();
+		}
+
 		public R append(Append append) {
 			try {
 				return convert(table.append(append));
