@@ -247,7 +247,12 @@ public class HBaseTable {
 			}
 
 			public R next() throws IOException {
-				return convert(scanner.next());
+				Result result = scanner.next();
+				if (result == null) {
+					return null;
+				}
+
+				return convert(result);
 			}
 
 			private R convert(Result result) {
