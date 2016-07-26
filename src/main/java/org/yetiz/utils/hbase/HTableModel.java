@@ -436,7 +436,9 @@ public abstract class HTableModel<T extends HTableModel> {
 	 * @return
 	 */
 	public T then(ModelCallbackTask<T> task) {
-		task.callback((T) this);
+		if (!isEmpty() && isResult) {
+			task.callback((T) this);
+		}
 		return (T) this;
 	}
 
