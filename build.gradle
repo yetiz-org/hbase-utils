@@ -32,18 +32,16 @@ dependencies {
     compile 'org.apache.hbase:hbase-client:1.0.0'
     // for Logging - start
     compile 'org.slf4j:slf4j-api:1.7.25'
-    compile 'org.apache.logging.log4j:log4j-slf4j-impl:2.9.1'
-    compile 'org.apache.logging.log4j:log4j-api:2.9.1'
-    compile 'org.apache.logging.log4j:log4j-core:2.9.1'
-    compile 'com.fasterxml.jackson.core:jackson-core:2.9.2'
-    compile 'com.fasterxml.jackson.core:jackson-databind:2.9.2'
-    compile 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.9.2'
+    compile 'org.apache.logging.log4j:log4j-slf4j-impl:2.11.0'
+    compile 'com.fasterxml.jackson.core:jackson-core:2.9.5'
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.9.5'
+    compile 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.9.5'
     // reflection
-    compile 'org.javassist:javassist:3.20.0-GA'
+    compile 'org.javassist:javassist:3.22.0-GA'
     compile 'org.apache.servicemix.bundles:org.apache.servicemix.bundles.reflections:0.9.10_3'
 
-    compile ('org.apache.httpcomponents:httpclient:4.5.3'){force = true}
-    compile ('org.apache.httpcomponents:httpcore:4.4.8'){force = true}
+//    compile ('org.apache.httpcomponents:httpclient:4.5.3'){force = true}
+//    compile ('org.apache.httpcomponents:httpcore:4.4.8'){force = true}
 
 }
 
