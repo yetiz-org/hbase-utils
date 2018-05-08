@@ -1,5 +1,5 @@
 group 'org.yetiz.utils'
-version '2.1.0.0.1'
+version '2.1.0.0.2'
 
 apply plugin: 'java'
 apply plugin: 'idea'
@@ -29,7 +29,9 @@ dependencies {
     // CDH HBase
 //    compile 'org.apache.hbase:hbase-client:1.0.0-cdh5.5.1'
     // Apache
-    compile 'org.apache.hbase:hbase-client:1.0.0'
+    compile('org.apache.hbase:hbase-client:1.2.6')
+    // Netty for Hadoop Client
+    compile('io.netty:netty-all:4.1.24.Final') { force = true }
     // for Logging - start
     compile 'org.slf4j:slf4j-api:1.7.25'
     compile 'org.apache.logging.log4j:log4j-slf4j-impl:2.11.0'
